@@ -166,6 +166,7 @@ function UpdateStatisticsPanel()
     local timeRemaining = HardcoreDeathrace.GetTimeRemaining()
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
     local isResting = HardcoreDeathrace.IsResting()
+    local isPaused = HardcoreDeathrace.IsPaused()
     local hasFailed = HardcoreDeathrace.HasFailed()
     local hasWon = HardcoreDeathrace.HasWon()
     local failureLevel = HardcoreDeathrace.GetFailureLevel()
@@ -191,7 +192,10 @@ function UpdateStatisticsPanel()
         local timePercent = (timeRemaining / timeForLevel) * 100
         
         -- Set color based on time remaining percentage
-        if isResting then
+        if isPaused then
+            -- Light blue/cyan when paused (for testing)
+            statsFrame.timeRemainingValue:SetTextColor(0, 1, 1)
+        elseif isResting then
             -- Light blue/cyan when resting (same as old "(Paused)" color)
             statsFrame.timeRemainingValue:SetTextColor(0, 1, 1)
         elseif timePercent > 75 then
@@ -217,9 +221,11 @@ function UpdateStatisticsPanel()
     -- Update total time played (score) in /played format
     statsFrame.totalTimeValue:SetText(HardcoreDeathrace.FormatPlayedTime(totalTimePlayed))
     
-    -- Update status (FAILED is now shown in the timer itself)
+    -- Update status (show PAUSED when paused, empty otherwise)
     if hasFailed then
         statsFrame.statusLabel:SetText('')
+    elseif isPaused then
+        statsFrame.statusLabel:SetText('|cFF00FFFF(PAUSED)|r')
     else
         statsFrame.statusLabel:SetText('')
     end
