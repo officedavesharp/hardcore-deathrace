@@ -456,6 +456,9 @@ local function UpdateTimer()
     SaveCharacterData()
 end
 
+-- Forward declaration for AnnounceLevelUp (defined later after FormatPlayedTime)
+local AnnounceLevelUp
+
 -- Handle level up
 local function OnLevelUp(newLevel)
     if hasFailed or hasWon then
@@ -510,7 +513,7 @@ local function OnLevelUp(newLevel)
     RemoveTunnelVision()
     previousDarknessLevel = 0
     
-    -- Announce level up (function declared later after FormatPlayedTime)
+    -- Announce level up
     AnnounceLevelUp(newLevel)
     
     SaveCharacterData()
@@ -594,8 +597,8 @@ local function FormatPlayedTimeFull(seconds)
     return table.concat(parts, ", ")
 end
 
--- Announce level up to guild/party or say chat
-local function AnnounceLevelUp(level)
+-- Announce level up to guild/party or say chat (assign to forward-declared variable)
+AnnounceLevelUp = function(level)
     -- Format score
     local scoreText = FormatPlayedTime(totalTimePlayed)
     
@@ -607,10 +610,14 @@ local function AnnounceLevelUp(level)
     local message = string.format("I just hit level %d using the Hardcore Deathrace addon. My current score is %s and I have %s to hit level %d before I fail the run.", 
                                    level, scoreText, timeRemainingText, nextLevel)
     
-    -- Check if in guild or party
+    -- Check if in guild or party (Classic Era compatible)
     local inGuild = IsInGuild()
-    local inParty = GetNumPartyMembers() > 0
-    local inRaid = GetNumRaidMembers() > 0
+    -- In Classic Era, use GetNumGroupMembers() which returns party+self count
+    -- If > 1, player is in a group (party or raid)
+    local numGroupMembers = GetNumGroupMembers and GetNumGroupMembers() or 0
+    local inParty = numGroupMembers > 0
+    -- Check if in raid (Classic Era)
+    local inRaid = IsInRaid and IsInRaid() or false
     
     -- Send to appropriate channel (priority: raid > party > guild > say)
     if inRaid then
