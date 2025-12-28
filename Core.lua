@@ -854,37 +854,27 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
             end
         end
     elseif event == 'CHAT_MSG_SKILL' then
-        -- Detect profession skill level ups (only actual professions, not weapon/defense skills)
+        -- Detect profession skill level ups
         if not hasFailed and not hasWon then
             local message = ...
-            
-            -- List of Classic Era professions (including secondary professions)
-            local professions = {
-                "Alchemy", "Blacksmithing", "Enchanting", "Engineering", "Herbalism",
-                "Leatherworking", "Mining", "Skinning", "Tailoring",
-                "Cooking", "Fishing", "First Aid"
-            }
-            
-            -- Parse "Your skill in [Profession] has increased to [X]." format
-            local professionName, skillLevel = message:match("Your skill in (.+) has increased to (%d+)")
-            
-            -- Check if the skill name matches a profession
-            local isProfession = false
-            if professionName then
-                -- Normalize profession name (remove trailing period and whitespace)
-                professionName = professionName:gsub("%.", ""):gsub("^%s+", ""):gsub("%s+$", "")
-                
-                -- Check against profession list (case-insensitive)
-                for _, profName in ipairs(professions) do
-                    if professionName:lower() == profName:lower() then
-                        isProfession = true
-                        break
+            -- Parse skill increase messages - multiple possible formats:
+            -- "Your skill in [Profession] has increased to [X]."
+            -- "Skill [ID] increased from [X] to [Y]."
+            local skillIncrease = message:match("Your skill in .+ has increased to (%d+)")
+            if not skillIncrease then
+                -- Try alternative format: "Skill X increased from Y to Z"
+                local oldRank, newRank = message:match("Skill%s+%d+%s+increased%s+from%s+(%d+)%s+to%s+(%d+)")
+                if oldRank and newRank then
+                    local oldRankNum = tonumber(oldRank)
+                    local newRankNum = tonumber(newRank)
+                    -- Only count if skill actually increased (not just updated)
+                    if newRankNum and newRankNum > (oldRankNum or 0) then
+                        skillIncrease = newRankNum
                     end
                 end
             end
             
-            -- Only add time if it's a profession skill increase
-            if isProfession and skillLevel then
+            if skillIncrease then
                 -- Profession skill leveled up - add 1 minute (60 seconds) to failure timer
                 timeRemainingThisLevel = timeRemainingThisLevel + 60
                 
@@ -898,86 +888,11 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
     end
 end)
 
--- Pause timer (for testing - will be removed later)
-local function PauseTimer()
-    if hasFailed or hasWon then
-        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Cannot pause: run has already ended.")
-        return
-    end
-    
-    if isPaused then
-        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Timer is already paused.")
-        return
-    end
-    
-    -- Update time before pausing to account for any time that passed
-    if not isResting then
-        local currentTime = time()
-        local deltaTime = currentTime - timeAtLastUpdate
-        if deltaTime > 0 and timeRemainingThisLevel > 0 then
-            if timeRemainingThisLevel - deltaTime > 0 then
-                timeRemainingThisLevel = timeRemainingThisLevel - deltaTime
-                totalTimePlayed = totalTimePlayed + deltaTime
-            else
-                -- Time would have run out
-                timeRemainingThisLevel = 0
-            end
-        end
-        timeAtLastUpdate = currentTime
-    end
-    
-    isPaused = true
-    SaveCharacterData()
-    UpdateStatisticsPanel()
-    ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Timer paused.")
-end
-
--- Resume timer (for testing - will be removed later)
-local function ResumeTimer()
-    if hasFailed or hasWon then
-        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Cannot resume: run has already ended.")
-        return
-    end
-    
-    if not isPaused then
-        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Timer is not paused.")
-        return
-    end
-    
-    -- Reset timeAtLastUpdate to current time when resuming (prevents time jump)
-    timeAtLastUpdate = time()
-    isPaused = false
-    SaveCharacterData()
-    UpdateStatisticsPanel()
-    ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r Timer resumed.")
-end
-
--- Slash command handler (for testing - will be removed later)
-local function HandleSlashCommand(msg)
-    -- Trim whitespace and convert to lowercase
-    local command = string.lower(string.gsub(msg, "^%s*(.-)%s*$", "%1"))
-    
-    if command == "pause" then
-        PauseTimer()
-    elseif command == "resume" then
-        ResumeTimer()
-    else
-        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Usage:")
-        ChatFrame1:AddMessage("  /hcdr pause - Pause the timer")
-        ChatFrame1:AddMessage("  /hcdr resume - Resume the timer")
-    end
-end
-
--- Register slash commands (for testing - will be removed later)
-SLASH_HCDR1 = "/hcdr"
-SlashCmdList["HCDR"] = HandleSlashCommand
-
 -- Export functions for UI
 HardcoreDeathrace.GetCurrentLevel = function() return currentLevel end
 HardcoreDeathrace.GetTimeRemaining = function() return timeRemainingThisLevel end
 HardcoreDeathrace.GetTotalTimePlayed = function() return totalTimePlayed end
 HardcoreDeathrace.IsResting = function() return isResting end
-HardcoreDeathrace.IsPaused = function() return isPaused end
 HardcoreDeathrace.HasFailed = function() return hasFailed end
 HardcoreDeathrace.HasWon = function() return hasWon end
 HardcoreDeathrace.GetFailureLevel = function() return failureLevel end
