@@ -6,7 +6,7 @@ Watch development live on Twitch: [twitch.tv/vanityprojects](https://twitch.tv/v
 
 ## Features
 
-**Timer System**: Each level has a time limit - race against the clock to level up before time runs out. Time limits increase as you progress: 30 minutes for levels 1-10, 1 hour for 11-20, 2 hours for 21-30, 4 hours for 31-40, 6 hours for 41-50, and 8 hours for 51-60.
+**Timer System**: Each level has a time limit - race against the clock to level up before time runs out. Time limits increase as you progress towards 60.
 
 **Progressive Screen Darkening**: As your timer runs low, your screen progressively darkens with tunnel vision effects. The darker it gets, the less time you have remaining.
 
@@ -14,7 +14,7 @@ Watch development live on Twitch: [twitch.tv/vanityprojects](https://twitch.tv/v
 
 **Rested Area Pause**: The timer automatically pauses when you're in rested areas, allowing you to plan your next moves without pressure.
 
-**Achievement Integration**: Completing achievements from the HardcoreAchievements sister addon grants you a 1-hour time bonus, rewarding exploration and completion.
+**Bonus Time**: Completing achievements from the Hardcore Achievements by Chills companion addon, or levelling up professions grants bonus time.
 
 ## Installation
 
@@ -26,4 +26,3 @@ Watch development live on Twitch: [twitch.tv/vanityprojects](https://twitch.tv/v
 ## Credits
 
 **Author**: VanityProjects - [twitch.tv/vanityprojects](https://twitch.tv/vanityprojects)
-
