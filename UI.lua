@@ -8,6 +8,7 @@ local failureFrame = nil
 HardcoreDeathraceDB = HardcoreDeathraceDB or {}
 HardcoreDeathraceDB.settings = HardcoreDeathraceDB.settings or {}
 
+
 -- Initialize UI elements
 function InitializeUI()
     CreateStatisticsPanel()
@@ -226,7 +227,20 @@ end
 
 -- Create failure/win screen (reusable for both)
 function CreateFailureScreen()
-    failureFrame = CreateFrame('Frame', 'HardcoreDeathraceFailureFrame', UIParent)
+    -- Destroy old frame if it exists to ensure fresh creation
+    if failureFrame then
+        failureFrame:Hide()
+        failureFrame:SetParent(nil)
+        -- Clear all scripts and children
+        failureFrame:SetScript('OnMouseDown', nil)
+        failureFrame:SetScript('OnMouseUp', nil)
+        failureFrame:SetScript('OnEnter', nil)
+        failureFrame:SetScript('OnLeave', nil)
+        failureFrame = nil
+    end
+    
+    -- Use nil name to avoid caching issues
+    failureFrame = CreateFrame('Frame', nil, UIParent)
     failureFrame:SetAllPoints(UIParent)
     failureFrame:SetFrameStrata('FULLSCREEN_DIALOG')
     failureFrame:SetFrameLevel(3000) -- Above tunnel_vision_5 (level 2000)
@@ -249,24 +263,8 @@ function CreateFailureScreen()
     scoreValue:SetTextColor(1, 1, 1) -- White color
     failureFrame.scoreValue = scoreValue
     
-    -- Continue Playing button (centered, only button)
-    local continueButton = CreateFrame('Button', 'HardcoreDeathraceContinueButton', failureFrame)
-    continueButton:SetSize(180, 30)
-    continueButton:SetPoint('CENTER', failureFrame, 'CENTER', 0, -80)
-    
-    -- Button background
-    continueButton:SetNormalTexture('Interface\\Buttons\\UI-Panel-Button-Up')
-    continueButton:SetPushedTexture('Interface\\Buttons\\UI-Panel-Button-Down')
-    continueButton:SetHighlightTexture('Interface\\Buttons\\UI-Panel-Button-Highlight')
-    
-    -- Button text
-    local continueText = continueButton:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    continueText:SetPoint('CENTER', continueButton, 'CENTER', 0, 0)
-    continueText:SetJustifyH('CENTER')
-    continueText:SetText('Continue Playing')
-    continueButton:SetFontString(continueText)
-    
-    continueButton:SetScript('OnClick', function()
+    -- Function to handle continue action (define before using)
+    local function ContinuePlaying()
         -- Disable fog effect (remove tunnel_vision_5)
         RemoveTunnelVision()
         -- Hide failure screen
@@ -275,15 +273,44 @@ function CreateFailureScreen()
         if statsFrame then
             statsFrame:Show()
         end
+    end
+    
+    -- Store continue function on frame so it's accessible
+    failureFrame.ContinuePlaying = ContinuePlaying
+    
+    -- Continue playing text - clickable
+    local continueTextFrame = CreateFrame('Frame', nil, failureFrame)
+    continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -80)
+    continueTextFrame:SetSize(300, 30)
+    continueTextFrame:EnableMouse(true)
+    
+    local continueText = continueTextFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+    continueText:SetPoint('CENTER', continueTextFrame, 'CENTER', 0, 0)
+    continueText:SetFont('Fonts\\FRIZQT__.TTF', 16)
+    continueText:SetTextColor(1, 1, 0) -- Yellow color
+    continueText:SetText('Click here to continue playing')
+    continueTextFrame.text = continueText
+    
+    -- Make it clickable
+    continueTextFrame:SetScript('OnMouseUp', function()
+        ContinuePlaying()
     end)
-    failureFrame.continueButton = continueButton
+    
+    -- Add hover effect
+    continueTextFrame:SetScript('OnEnter', function()
+        continueText:SetTextColor(1, 1, 1) -- White on hover
+    end)
+    continueTextFrame:SetScript('OnLeave', function()
+        continueText:SetTextColor(1, 1, 0) -- Yellow when not hovering
+    end)
+    
+    failureFrame.continueText = continueTextFrame
 end
 
 -- Show failure screen
 function ShowFailureScreen()
-    if not failureFrame then
-        CreateFailureScreen()
-    end
+    -- Always recreate to ensure fresh frame with latest code
+    CreateFailureScreen()
     
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
     -- Show full format (days, hours, minutes, seconds)
@@ -300,9 +327,8 @@ end
 
 -- Show win screen
 function ShowWinScreen()
-    if not failureFrame then
-        CreateFailureScreen()
-    end
+    -- Always recreate to ensure fresh frame with latest code
+    CreateFailureScreen()
     
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
     -- Show full format (days, hours, minutes, seconds)

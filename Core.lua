@@ -762,3 +762,4 @@ HardcoreDeathrace.FormatPlayedTime = FormatPlayedTime
 HardcoreDeathrace.FormatPlayedTimeFull = FormatPlayedTimeFull
 HardcoreDeathrace.GetTimeForLevel = function(level) return TIME_PER_LEVEL[level] or TIME_PER_LEVEL[1] end
 
+
