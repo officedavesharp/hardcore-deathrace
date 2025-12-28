@@ -156,6 +156,14 @@ local function InitializeCharacterData()
     local charKey = playerName .. '-' .. realmName
     
     local playerLevel = UnitLevel('player')
+    local currentXP = UnitXP('player')
+    
+    -- Check if this is a fresh character (level 1, 0 XP earned)
+    -- If so, wipe saved variables and start fresh
+    if playerLevel == 1 and currentXP == 0 then
+        -- Fresh character detected - wipe saved data for this character
+        HardcoreDeathraceDB[charKey] = nil
+    end
     
     -- Initialize character data if it doesn't exist
     if not HardcoreDeathraceDB[charKey] then
