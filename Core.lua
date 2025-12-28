@@ -155,28 +155,53 @@ local function InitializeCharacterData()
     local realmName = GetRealmName()
     local charKey = playerName .. '-' .. realmName
     
-    -- Check if this is a first-time load (no saved data exists)
-    local isFirstTimeLoad = not HardcoreDeathraceDB[charKey]
     local playerLevel = UnitLevel('player')
     
     -- Initialize character data if it doesn't exist
-    if isFirstTimeLoad then
-        -- First time loading addon - start fresh with current level
-        HardcoreDeathraceDB[charKey] = {
-            level = playerLevel,
-            timeRemainingThisLevel = TIME_PER_LEVEL[playerLevel] or TIME_PER_LEVEL[1], -- Full time for current level
-            totalTimePlayed = 0, -- Start score at 0
-            lastUpdateTime = time(),
-            hasFailed = false,
-            hasWon = false,
-            failureLevel = 1,
-            trackedTotalXP = 0
-        }
+    if not HardcoreDeathraceDB[charKey] then
+        -- Check if player is loading addon for first time at level > 1
+        if playerLevel > 1 then
+            -- First-time load at level > 1 - mark as failed (anti-cheat)
+            HardcoreDeathraceDB[charKey] = {
+                level = playerLevel,
+                timeRemainingThisLevel = 0,
+                totalTimePlayed = 0,
+                lastUpdateTime = time(),
+                hasFailed = true,
+                hasWon = false,
+                failureLevel = playerLevel,
+                trackedTotalXP = 0
+            }
+        else
+            -- First-time load at level 1 - start normally
+            HardcoreDeathraceDB[charKey] = {
+                level = playerLevel,
+                timeRemainingThisLevel = 0,
+                totalTimePlayed = 0,
+                lastUpdateTime = time(),
+                hasFailed = false,
+                hasWon = false,
+                failureLevel = 1,
+                trackedTotalXP = 0
+            }
+        end
     end
     
     -- Load character data
     local charData = HardcoreDeathraceDB[charKey]
     currentLevel = charData.level or playerLevel
+    
+    -- Load state variables first
+    totalTimePlayed = charData.totalTimePlayed or 0
+    hasFailed = charData.hasFailed or false
+    hasWon = charData.hasWon or false
+    failureLevel = charData.failureLevel or currentLevel
+    trackedTotalXP = charData.trackedTotalXP or 0
+    timeAtLastUpdate = time()
+    
+    -- Check if this is a first-time load failure (level > 1 on first load)
+    -- Detected by: failed, no time played, level > 1, and level matches current (just initialized)
+    local isFirstTimeFailure = hasFailed and totalTimePlayed == 0 and playerLevel > 1 and (charData.level == playerLevel)
     
     -- If character leveled up since last save, roll over time
     if charData.level and charData.level < playerLevel then
@@ -188,22 +213,25 @@ local function InitializeCharacterData()
     elseif charData.timeRemainingThisLevel and charData.timeRemainingThisLevel > 0 then
         -- Use saved time remaining
         timeRemainingThisLevel = charData.timeRemainingThisLevel
-    else
-        -- Starting fresh - allocate time for current level
+    elseif not isFirstTimeFailure then
+        -- Starting fresh - allocate time for current level (unless first-time failure)
         timeRemainingThisLevel = TIME_PER_LEVEL[playerLevel] or TIME_PER_LEVEL[1]
+        currentLevel = playerLevel
+    else
+        -- First-time failure - don't allocate time, keep at 0
+        timeRemainingThisLevel = 0
         currentLevel = playerLevel
     end
     
-    -- Load total time played (0 for first-time loads, saved value otherwise)
-    totalTimePlayed = charData.totalTimePlayed or 0
-    hasFailed = charData.hasFailed or false
-    hasWon = charData.hasWon or false
-    failureLevel = charData.failureLevel or currentLevel
-    trackedTotalXP = charData.trackedTotalXP or 0
-    timeAtLastUpdate = time()
-    
-    -- Check for XP cheating on login
-    CheckXPCheat()
+    -- If failed on first-time load at level > 1, don't start timer and don't check XP cheat
+    if isFirstTimeFailure then
+        -- First-time load failure - don't start timer, just show FAILED in tracker
+        isPaused = true
+        -- Don't check XP cheat for first-time failures
+    else
+        -- Check for XP cheating on login (only if not first-time load failure)
+        CheckXPCheat()
+    end
 end
 
 -- Save character data
@@ -609,16 +637,13 @@ end
 
 -- Announce level up to guild/party or say chat (assign to forward-declared variable)
 AnnounceLevelUp = function(level)
-    -- Format score
-    local scoreText = FormatPlayedTime(totalTimePlayed)
-    
     -- Calculate next level and time remaining
     local nextLevel = level + 1
     local timeRemainingText = FormatPlayedTime(timeRemainingThisLevel)
     
-    -- Build message
-    local message = string.format("I just hit level %d using the Hardcore Deathrace addon. My current score is %s and I have %s to hit level %d before I fail the run.", 
-                                   level, scoreText, timeRemainingText, nextLevel)
+    -- Build message (removed score, kept next level info)
+    local message = string.format("I just hit level %d using the Hardcore Deathrace addon. I have %s to hit level %d before I fail the run.", 
+                                   level, timeRemainingText, nextLevel)
     
     -- Check if in guild or party (Classic Era compatible)
     local inGuild = IsInGuild()
