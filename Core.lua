@@ -8,24 +8,24 @@ HardcoreDeathrace = CreateFrame('Frame')
 HardcoreDeathraceDB = HardcoreDeathraceDB or {}
 
 -- Time allocation per level (in seconds)
--- Levels 1-10: 30 minutes, 11-20: 60 minutes, 21-30: 120 minutes, 31-40: 240 minutes, 41-50: 360 minutes, 51-60: 480 minutes
+-- Levels 1-5: 10 minutes, 6-10: 20 minutes, 11-15: 45 minutes, 16-20: 60 minutes, 21-30: 120 minutes, 31-40: 240 minutes, 41-50: 360 minutes, 51-60: 480 minutes
 local TIME_PER_LEVEL = {
-    [1] = 30 * 60,   -- 30 minutes
-    [2] = 30 * 60,
-    [3] = 30 * 60,
-    [4] = 30 * 60,
-    [5] = 30 * 60,
-    [6] = 30 * 60,
-    [7] = 30 * 60,
-    [8] = 30 * 60,
-    [9] = 30 * 60,
-    [10] = 30 * 60,
-    [11] = 60 * 60,  -- 60 minutes (1 hour)
-    [12] = 60 * 60,
-    [13] = 60 * 60,
-    [14] = 60 * 60,
-    [15] = 60 * 60,
-    [16] = 60 * 60,
+    [1] = 10 * 60,   -- 10 minutes
+    [2] = 10 * 60,
+    [3] = 10 * 60,
+    [4] = 10 * 60,
+    [5] = 10 * 60,
+    [6] = 20 * 60,   -- 20 minutes
+    [7] = 20 * 60,
+    [8] = 20 * 60,
+    [9] = 20 * 60,
+    [10] = 20 * 60,
+    [11] = 45 * 60,  -- 45 minutes
+    [12] = 45 * 60,
+    [13] = 45 * 60,
+    [14] = 45 * 60,
+    [15] = 45 * 60,
+    [16] = 60 * 60,  -- 60 minutes (1 hour)
     [17] = 60 * 60,
     [18] = 60 * 60,
     [19] = 60 * 60,
@@ -155,12 +155,17 @@ local function InitializeCharacterData()
     local realmName = GetRealmName()
     local charKey = playerName .. '-' .. realmName
     
+    -- Check if this is a first-time load (no saved data exists)
+    local isFirstTimeLoad = not HardcoreDeathraceDB[charKey]
+    local playerLevel = UnitLevel('player')
+    
     -- Initialize character data if it doesn't exist
-    if not HardcoreDeathraceDB[charKey] then
+    if isFirstTimeLoad then
+        -- First time loading addon - start fresh with current level
         HardcoreDeathraceDB[charKey] = {
-            level = UnitLevel('player'),
-            timeRemainingThisLevel = 0,
-            totalTimePlayed = 0,
+            level = playerLevel,
+            timeRemainingThisLevel = TIME_PER_LEVEL[playerLevel] or TIME_PER_LEVEL[1], -- Full time for current level
+            totalTimePlayed = 0, -- Start score at 0
             lastUpdateTime = time(),
             hasFailed = false,
             hasWon = false,
@@ -171,7 +176,6 @@ local function InitializeCharacterData()
     
     -- Load character data
     local charData = HardcoreDeathraceDB[charKey]
-    local playerLevel = UnitLevel('player')
     currentLevel = charData.level or playerLevel
     
     -- If character leveled up since last save, roll over time
@@ -190,6 +194,7 @@ local function InitializeCharacterData()
         currentLevel = playerLevel
     end
     
+    -- Load total time played (0 for first-time loads, saved value otherwise)
     totalTimePlayed = charData.totalTimePlayed or 0
     hasFailed = charData.hasFailed or false
     hasWon = charData.hasWon or false
@@ -560,16 +565,21 @@ local function FormatPlayedTime(seconds)
         end
     else
         -- No days, show hours (if > 0), minutes, and seconds
-        -- Always show minutes and seconds when days = 0, unless minutes = 0 then just show seconds
+        -- If hours > 0, hide seconds and only show hours and minutes
         if hours > 0 then
             table.insert(parts, string.format("%d hour%s", hours, hours == 1 and "" or "s"))
+            if minutes > 0 then
+                table.insert(parts, string.format("%d minute%s", minutes, minutes == 1 and "" or "s"))
+            end
+            -- Don't show seconds when hours are present
+        else
+            -- No hours, show minutes and seconds
+            if minutes > 0 then
+                table.insert(parts, string.format("%d minute%s", minutes, minutes == 1 and "" or "s"))
+            end
+            -- Always show seconds when no hours (even if 0)
+            table.insert(parts, string.format("%d second%s", secs, secs == 1 and "" or "s"))
         end
-        -- Show minutes if > 0 or if hours > 0
-        if minutes > 0 or hours > 0 then
-            table.insert(parts, string.format("%d minute%s", minutes, minutes == 1 and "" or "s"))
-        end
-        -- Always show seconds when days = 0 (even if 0)
-        table.insert(parts, string.format("%d second%s", secs, secs == 1 and "" or "s"))
     end
     
     return table.concat(parts, ", ")
@@ -614,21 +624,44 @@ AnnounceLevelUp = function(level)
     local inGuild = IsInGuild()
     -- In Classic Era, use GetNumGroupMembers() which returns party+self count
     -- If > 1, player is in a group (party or raid)
-    local numGroupMembers = GetNumGroupMembers and GetNumGroupMembers() or 0
-    local inParty = numGroupMembers > 0
-    -- Check if in raid (Classic Era)
+    local numGroupMembers = GetNumGroupMembers and GetNumGroupMembers() or 1
+    -- Check if in raid first (Classic Era)
     local inRaid = IsInRaid and IsInRaid() or false
+    -- If not in raid but have more than 1 group member, we're in a party
+    local inParty = not inRaid and numGroupMembers > 1
     
     -- Send to appropriate channel (priority: raid > party > guild > say)
+    -- Use ChatFrame1:AddMessage for say channel to avoid protected function issues
     if inRaid then
-        SendChatMessage(message, "RAID")
+        -- Try raid channel
+        local success = pcall(function()
+            SendChatMessage(message, "RAID")
+        end)
+        if not success then
+            -- Fallback to say using AddMessage
+            ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r " .. message)
+        end
     elseif inParty then
-        SendChatMessage(message, "PARTY")
+        -- Try party channel
+        local success = pcall(function()
+            SendChatMessage(message, "PARTY")
+        end)
+        if not success then
+            -- Fallback to say using AddMessage
+            ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r " .. message)
+        end
     elseif inGuild then
-        SendChatMessage(message, "GUILD")
+        -- Try guild channel
+        local success = pcall(function()
+            SendChatMessage(message, "GUILD")
+        end)
+        if not success then
+            -- Fallback to say using AddMessage
+            ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r " .. message)
+        end
     else
-        -- Not in party/guild, use say chat
-        SendChatMessage(message, "SAY")
+        -- For say channel, use AddMessage to avoid protected function issues
+        ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r " .. message)
     end
 end
 
