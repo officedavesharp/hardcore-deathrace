@@ -4,6 +4,10 @@
 local statsFrame = nil
 local failureFrame = nil
 
+-- Initialize global settings if needed
+HardcoreDeathraceDB = HardcoreDeathraceDB or {}
+HardcoreDeathraceDB.settings = HardcoreDeathraceDB.settings or {}
+
 -- Initialize UI elements
 function InitializeUI()
     CreateStatisticsPanel()
@@ -15,7 +19,27 @@ function CreateStatisticsPanel()
     -- Create main frame
     statsFrame = CreateFrame('Frame', 'HardcoreDeathraceStatsFrame', UIParent)
     statsFrame:SetSize(250, 105)
-    statsFrame:SetPoint('BOTTOMRIGHT', UIParent, 'BOTTOMRIGHT', -40, 80)
+    
+    -- Load saved position or use default
+    -- Ensure settings table exists
+    if not HardcoreDeathraceDB then
+        HardcoreDeathraceDB = {}
+    end
+    if not HardcoreDeathraceDB.settings then
+        HardcoreDeathraceDB.settings = {}
+    end
+    
+    local settings = HardcoreDeathraceDB.settings
+    if settings.statsFramePoint and settings.statsFrameRelativePoint and 
+       settings.statsFrameX and settings.statsFrameY then
+        -- Use saved position (always relative to UIParent)
+        statsFrame:SetPoint(settings.statsFramePoint, UIParent, settings.statsFrameRelativePoint, 
+                           settings.statsFrameX, settings.statsFrameY)
+    else
+        -- Use default position
+        statsFrame:SetPoint('BOTTOMRIGHT', UIParent, 'BOTTOMRIGHT', -40, 80)
+    end
+    
     -- Ensure panel stays above darkness overlays (darkness uses FULLSCREEN_DIALOG with level 1000+)
     statsFrame:SetFrameStrata('FULLSCREEN_DIALOG')
     statsFrame:SetFrameLevel(2000) -- Higher than darkness overlays (max darkness is level 1004)
@@ -62,7 +86,22 @@ function CreateStatisticsPanel()
     statsFrame:EnableMouse(true)
     statsFrame:RegisterForDrag('LeftButton')
     statsFrame:SetScript('OnDragStart', statsFrame.StartMoving)
-    statsFrame:SetScript('OnDragStop', statsFrame.StopMovingOrSizing)
+    statsFrame:SetScript('OnDragStop', function(self)
+        self:StopMovingOrSizing()
+        -- Ensure settings table exists
+        if not HardcoreDeathraceDB then
+            HardcoreDeathraceDB = {}
+        end
+        if not HardcoreDeathraceDB.settings then
+            HardcoreDeathraceDB.settings = {}
+        end
+        -- Save the new position (always relative to UIParent)
+        local point, relativeTo, relativePoint, xOfs, yOfs = self:GetPoint()
+        HardcoreDeathraceDB.settings.statsFramePoint = point
+        HardcoreDeathraceDB.settings.statsFrameRelativePoint = relativePoint
+        HardcoreDeathraceDB.settings.statsFrameX = xOfs
+        HardcoreDeathraceDB.settings.statsFrameY = yOfs
+    end)
     statsFrame:Show()
     
     -- Title
@@ -195,10 +234,10 @@ function CreateFailureScreen()
     -- Background is handled by tunnel_vision_5.png for failure, transparent for win
     failureFrame:Hide()
     
-    -- Failure/Win message (centered) - same font as tracker title
+    -- Failure/Win message (centered) - same font as tracker title, much larger
     local failureText = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormalHuge')
     failureText:SetPoint('CENTER', failureFrame, 'CENTER', 0, 100)
-    failureText:SetFont('Fonts\\MORPHEUS.TTF', 20, 'OUTLINE') -- Same font as tracker title
+    failureText:SetFont('Fonts\\MORPHEUS.TTF', 36, 'OUTLINE') -- Much larger font
     failureText:SetText('')
     failureFrame.failureText = failureText
     
@@ -207,7 +246,7 @@ function CreateFailureScreen()
     scoreValue:SetPoint('CENTER', failureFrame, 'CENTER', 0, 0)
     scoreValue:SetFont('Fonts\\FRIZQT__.TTF', 20)
     scoreValue:SetText('')
-    scoreValue:SetTextColor(1, 1, 0)
+    scoreValue:SetTextColor(1, 1, 1) -- White color
     failureFrame.scoreValue = scoreValue
     
     -- Continue Playing button (centered, only button)
@@ -222,7 +261,7 @@ function CreateFailureScreen()
     
     -- Button text
     local continueText = continueButton:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    continueText:SetAllPoints(continueButton)
+    continueText:SetPoint('CENTER', continueButton, 'CENTER', 0, 0)
     continueText:SetJustifyH('CENTER')
     continueText:SetText('Continue Playing')
     continueButton:SetFontString(continueText)

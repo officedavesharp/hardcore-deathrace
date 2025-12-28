@@ -304,10 +304,16 @@ function ShowTunnelVision(blurIntensity, fadeIn)
     end
     
     local frame = HardcoreDeathrace.tunnelVisionFrames[frameName]
-    -- Support tunnel_vision_5.png for complete failure (all black)
-    local texturePath = 'Interface\\AddOns\\Hardcore Deathrace\\Textures\\tunnel_vision_' .. blurIntensity .. '.png'
     
-    frame.texture:SetTexture(texturePath)
+    -- For tunnel_vision_5, use solid black color texture (guaranteed to work)
+    if blurIntensity == 5 then
+        frame.texture:SetColorTexture(0, 0, 0, 1) -- Solid black
+    else
+        -- For other levels, load PNG texture
+        local texturePath = 'Interface\\AddOns\\Hardcore Deathrace\\Textures\\tunnel_vision_' .. blurIntensity .. '.png'
+        frame.texture:SetTexture(texturePath)
+    end
+    
     frame:Show()
     
     if fadeIn then
@@ -413,7 +419,12 @@ local function UpdateTimer()
     if not isResting then
         -- Check for failure BEFORE updating (to capture correct score)
         if timeRemainingThisLevel - deltaTime <= 0 then
-            -- Timer ran out - set to exactly 0 and don't update totalTimePlayed
+            -- Timer ran out - add remaining time to totalTimePlayed before failing
+            -- This ensures the score includes the full time survived
+            local remainingTime = timeRemainingThisLevel
+            totalTimePlayed = totalTimePlayed + remainingTime
+            
+            -- Set to exactly 0 and mark as failed
             timeRemainingThisLevel = 0
             hasFailed = true
             failureLevel = currentLevel -- Save the level at which they failed
@@ -422,6 +433,7 @@ local function UpdateTimer()
             RemoveTunnelVision()
             ShowTunnelVision(5, false) -- Show instantly, no fade
             ShowFailureScreen()
+            UpdateStatisticsPanel() -- Update UI to show FAILED
             return
         end
         
@@ -456,6 +468,24 @@ local function OnLevelUp(newLevel)
         trackedTotalXP = currentTotalXP
     end
     
+    -- Ensure we have the most up-to-date time remaining by updating timer one last time
+    -- This accounts for any time that passed since the last UpdateTimer call
+    if not isPaused and not isResting then
+        local currentTime = time()
+        local deltaTime = currentTime - timeAtLastUpdate
+        if deltaTime > 0 and timeRemainingThisLevel > 0 then
+            -- Only update if we have time remaining and time has passed
+            if timeRemainingThisLevel - deltaTime > 0 then
+                timeRemainingThisLevel = timeRemainingThisLevel - deltaTime
+                totalTimePlayed = totalTimePlayed + deltaTime
+            else
+                -- Time would have run out, but we're leveling up so set to 0
+                timeRemainingThisLevel = 0
+            end
+            timeAtLastUpdate = currentTime
+        end
+    end
+    
     -- Check if player reached level 60 (win condition)
     if newLevel >= 60 then
         hasWon = true
@@ -469,7 +499,7 @@ local function OnLevelUp(newLevel)
         return
     end
     
-    -- Roll over unused time
+    -- Roll over unused time (timeRemainingThisLevel now has the accurate leftover time)
     local previousTimeRemaining = timeRemainingThisLevel
     local newLevelTime = GetTimeForLevel(newLevel)
     
