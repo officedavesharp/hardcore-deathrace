@@ -854,27 +854,37 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
             end
         end
     elseif event == 'CHAT_MSG_SKILL' then
-        -- Detect profession skill level ups
+        -- Detect profession skill level ups (only actual professions, not weapon/defense skills)
         if not hasFailed and not hasWon then
             local message = ...
-            -- Parse skill increase messages - multiple possible formats:
-            -- "Your skill in [Profession] has increased to [X]."
-            -- "Skill [ID] increased from [X] to [Y]."
-            local skillIncrease = message:match("Your skill in .+ has increased to (%d+)")
-            if not skillIncrease then
-                -- Try alternative format: "Skill X increased from Y to Z"
-                local oldRank, newRank = message:match("Skill%s+%d+%s+increased%s+from%s+(%d+)%s+to%s+(%d+)")
-                if oldRank and newRank then
-                    local oldRankNum = tonumber(oldRank)
-                    local newRankNum = tonumber(newRank)
-                    -- Only count if skill actually increased (not just updated)
-                    if newRankNum and newRankNum > (oldRankNum or 0) then
-                        skillIncrease = newRankNum
+            
+            -- List of Classic Era professions (including secondary professions)
+            local professions = {
+                "Alchemy", "Blacksmithing", "Enchanting", "Engineering", "Herbalism",
+                "Leatherworking", "Mining", "Skinning", "Tailoring",
+                "Cooking", "Fishing", "First Aid"
+            }
+            
+            -- Parse "Your skill in [SkillName] has increased to [X]." format
+            local skillName, skillLevel = message:match("Your skill in (.+) has increased to (%d+)")
+            
+            -- Check if the skill name matches a profession
+            local isProfession = false
+            if skillName then
+                -- Normalize skill name (remove trailing period and whitespace)
+                skillName = skillName:gsub("%.", ""):gsub("^%s+", ""):gsub("%s+$", "")
+                
+                -- Check against profession list (case-insensitive)
+                for _, profName in ipairs(professions) do
+                    if skillName:lower() == profName:lower() then
+                        isProfession = true
+                        break
                     end
                 end
             end
             
-            if skillIncrease then
+            -- Only add time if it's a profession skill increase (not weapon/defense)
+            if isProfession and skillLevel then
                 -- Profession skill leveled up - add 1 minute (60 seconds) to failure timer
                 timeRemainingThisLevel = timeRemainingThisLevel + 60
                 
