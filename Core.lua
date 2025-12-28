@@ -777,6 +777,7 @@ HardcoreDeathrace:RegisterEvent('PLAYER_UPDATE_RESTING')
 HardcoreDeathrace:RegisterEvent('PLAYER_LOGOUT')
 HardcoreDeathrace:RegisterEvent('PLAYER_ENTERING_WORLD')
 HardcoreDeathrace:RegisterEvent('PLAYER_XP_UPDATE') -- Track XP changes for anti-cheat
+HardcoreDeathrace:RegisterEvent('CHAT_MSG_SKILL') -- Detect profession skill level ups
 
 -- Event handler
 HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
@@ -854,6 +855,38 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
             else
                 -- XP went down (shouldn't happen normally, but check anyway)
                 CheckXPCheat()
+            end
+        end
+    elseif event == 'CHAT_MSG_SKILL' then
+        -- Detect profession skill level ups
+        if not hasFailed and not hasWon then
+            local message = ...
+            -- Parse skill increase messages - multiple possible formats:
+            -- "Your skill in [Profession] has increased to [X]."
+            -- "Skill [ID] increased from [X] to [Y]."
+            local skillIncrease = message:match("Your skill in .+ has increased to (%d+)")
+            if not skillIncrease then
+                -- Try alternative format: "Skill X increased from Y to Z"
+                local oldRank, newRank = message:match("Skill%s+%d+%s+increased%s+from%s+(%d+)%s+to%s+(%d+)")
+                if oldRank and newRank then
+                    local oldRankNum = tonumber(oldRank)
+                    local newRankNum = tonumber(newRank)
+                    -- Only count if skill actually increased (not just updated)
+                    if newRankNum and newRankNum > (oldRankNum or 0) then
+                        skillIncrease = newRankNum
+                    end
+                end
+            end
+            
+            if skillIncrease then
+                -- Profession skill leveled up - add 1 minute (60 seconds) to failure timer
+                timeRemainingThisLevel = timeRemainingThisLevel + 60
+                
+                -- Update UI to reflect the bonus time
+                UpdateStatisticsPanel()
+                
+                -- Save the updated time
+                SaveCharacterData()
             end
         end
     end
