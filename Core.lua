@@ -700,38 +700,34 @@ AnnounceLevelUp = function(level)
     -- If not in raid but have more than 1 group member, we're in a party
     local inParty = not inRaid and numGroupMembers > 1
     
-    -- Send to appropriate channel (priority: raid > party > guild > say)
-    -- Use ChatFrame1:AddMessage for say channel to avoid protected function issues
-    if inRaid then
-        -- Try raid channel
-        local success = pcall(function()
-            SendChatMessage(message, "RAID")
-        end)
-        if not success then
-            -- Fallback to say using AddMessage
-            ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r " .. message)
-        end
-    elseif inParty then
-        -- Try party channel
+    -- Check if level is a multiple of 10 (for guild announcements)
+    local isMilestoneLevel = (level % 10 == 0)
+    
+    -- Send to appropriate channel
+    -- Party: every level
+    -- Guild: only at levels 10, 20, 30, 40, 50, 60
+    -- Raid and Say: disabled
+    
+    if inParty then
+        -- Announce to party every level
         local success = pcall(function()
             SendChatMessage(message, "PARTY")
         end)
         if not success then
-            -- Fallback to say using AddMessage
+            -- Fallback to chat frame if SendChatMessage fails
             ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r " .. message)
         end
-    elseif inGuild then
-        -- Try guild channel
+    end
+    
+    -- Guild announcement only at milestone levels (10, 20, 30, etc.)
+    if inGuild and isMilestoneLevel then
         local success = pcall(function()
             SendChatMessage(message, "GUILD")
         end)
         if not success then
-            -- Fallback to say using AddMessage
+            -- Fallback to chat frame if SendChatMessage fails
             ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r " .. message)
         end
-    else
-        -- For say channel, use AddMessage to avoid protected function issues
-        ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r " .. message)
     end
 end
 
