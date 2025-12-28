@@ -510,6 +510,9 @@ local function OnLevelUp(newLevel)
     RemoveTunnelVision()
     previousDarknessLevel = 0
     
+    -- Announce level up (function declared later after FormatPlayedTime)
+    AnnounceLevelUp(newLevel)
+    
     SaveCharacterData()
     UpdateStatisticsPanel()
 end
@@ -589,6 +592,37 @@ local function FormatPlayedTimeFull(seconds)
     table.insert(parts, string.format("%d second%s", secs, secs == 1 and "" or "s"))
     
     return table.concat(parts, ", ")
+end
+
+-- Announce level up to guild/party or say chat
+local function AnnounceLevelUp(level)
+    -- Format score
+    local scoreText = FormatPlayedTime(totalTimePlayed)
+    
+    -- Calculate next level and time remaining
+    local nextLevel = level + 1
+    local timeRemainingText = FormatPlayedTime(timeRemainingThisLevel)
+    
+    -- Build message
+    local message = string.format("I just hit level %d using the Hardcore Deathrace addon. My current score is %s and I have %s to hit level %d before I fail the run.", 
+                                   level, scoreText, timeRemainingText, nextLevel)
+    
+    -- Check if in guild or party
+    local inGuild = IsInGuild()
+    local inParty = GetNumPartyMembers() > 0
+    local inRaid = GetNumRaidMembers() > 0
+    
+    -- Send to appropriate channel (priority: raid > party > guild > say)
+    if inRaid then
+        SendChatMessage(message, "RAID")
+    elseif inParty then
+        SendChatMessage(message, "PARTY")
+    elseif inGuild then
+        SendChatMessage(message, "GUILD")
+    else
+        -- Not in party/guild, use say chat
+        SendChatMessage(message, "SAY")
+    end
 end
 
 -- Integration with HardcoreAchievements addon
