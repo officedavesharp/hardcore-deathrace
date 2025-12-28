@@ -462,6 +462,8 @@ local function UpdateTimer()
             hasFailed = true
             failureLevel = currentLevel -- Save the level at which they failed
             SaveCharacterData()
+            -- Announce failure
+            AnnounceFailure()
             -- Show tunnel_vision_5.png (all black) when timer runs out
             RemoveTunnelVision()
             ShowTunnelVision(5, false) -- Show instantly, no fade
@@ -633,6 +635,49 @@ local function FormatPlayedTimeFull(seconds)
     table.insert(parts, string.format("%d second%s", secs, secs == 1 and "" or "s"))
     
     return table.concat(parts, ", ")
+end
+
+-- Announce failure to guild/party or say chat
+local function AnnounceFailure()
+    -- Format time played in full format
+    local timeText = FormatPlayedTimeFull(totalTimePlayed)
+    
+    -- Build message
+    local message = string.format("I have just failed my Hardcore Deathrace run at level %d after %s.", 
+                                   failureLevel, timeText)
+    
+    -- Check if in guild or party (Classic Era compatible)
+    local inGuild = IsInGuild()
+    local numGroupMembers = GetNumGroupMembers and GetNumGroupMembers() or 1
+    local inRaid = IsInRaid and IsInRaid() or false
+    local inParty = not inRaid and numGroupMembers > 1
+    
+    -- Send to appropriate channel (priority: raid > party > guild > say)
+    if inRaid then
+        local success = pcall(function()
+            SendChatMessage(message, "RAID")
+        end)
+        if not success then
+            ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r " .. message)
+        end
+    elseif inParty then
+        local success = pcall(function()
+            SendChatMessage(message, "PARTY")
+        end)
+        if not success then
+            ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r " .. message)
+        end
+    elseif inGuild then
+        local success = pcall(function()
+            SendChatMessage(message, "GUILD")
+        end)
+        if not success then
+            ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r " .. message)
+        end
+    else
+        -- For say channel, use AddMessage to avoid protected function issues
+        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r " .. message)
+    end
 end
 
 -- Announce level up to guild/party or say chat (assign to forward-declared variable)
