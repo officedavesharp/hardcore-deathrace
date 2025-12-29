@@ -87,6 +87,7 @@ local TOTAL_XP_TABLE = {
 local currentLevel = 1
 local timeRemainingThisLevel = 0  -- Time remaining for current level (in seconds)
 local originalTimeAllocationThisLevel = 0  -- Original time allocation for current level (base + rolled-over, excluding bonuses) - used for darkness percentage calculation
+local maxTimeRemainingThisLevel = 0  -- Maximum time remaining this level (includes bonuses) - used for darkness threshold calculation
 local totalTimePlayed = 0         -- Total time played excluding rested areas (in seconds)
 local timeAtLastUpdate = 0        -- Timestamp of last update
 local isResting = false           -- Whether player is currently in a rested area
@@ -209,6 +210,14 @@ local function InitializeCharacterData()
     trackedTotalXP = charData.trackedTotalXP or 0
     timeAtLastUpdate = time()
     
+    -- Load max time remaining (for darkness calculation with bonuses)
+    -- If not saved, initialize to current time remaining
+    maxTimeRemainingThisLevel = charData.maxTimeRemainingThisLevel
+    if maxTimeRemainingThisLevel == nil then
+        -- Legacy data - initialize max to current time remaining (will be updated when bonuses are added)
+        maxTimeRemainingThisLevel = charData.timeRemainingThisLevel or 0
+    end
+    
     -- Check if this is a first-time load failure (level > 1 on first load)
     -- Detected by: failed, no time played, level > 1, and level matches current (just initialized)
     local isFirstTimeFailure = hasFailed and totalTimePlayed == 0 and playerLevel > 1 and (charData.level == playerLevel)
@@ -221,6 +230,8 @@ local function InitializeCharacterData()
         timeRemainingThisLevel = previousTimeRemaining + newLevelTime
         -- Set original allocation to base + rolled-over time (for darkness percentage calculation)
         originalTimeAllocationThisLevel = previousTimeRemaining + newLevelTime
+        -- Initialize max time remaining (will be updated when bonuses are added)
+        maxTimeRemainingThisLevel = timeRemainingThisLevel
         currentLevel = playerLevel
     elseif charData.timeRemainingThisLevel and charData.timeRemainingThisLevel > 0 then
         -- Use saved time remaining
@@ -233,16 +244,22 @@ local function InitializeCharacterData()
             -- This won't be perfect for old saves with rolled-over time, but it's better than nothing
             originalTimeAllocationThisLevel = TIME_PER_LEVEL[playerLevel] or TIME_PER_LEVEL[1]
         end
+        -- Update max time remaining if current is greater (handles bonuses added before save)
+        if timeRemainingThisLevel > maxTimeRemainingThisLevel then
+            maxTimeRemainingThisLevel = timeRemainingThisLevel
+        end
     elseif not isFirstTimeFailure then
         -- Starting fresh - allocate time for current level (unless first-time failure)
         local baseTime = TIME_PER_LEVEL[playerLevel] or TIME_PER_LEVEL[1]
         timeRemainingThisLevel = baseTime
         originalTimeAllocationThisLevel = baseTime
+        maxTimeRemainingThisLevel = baseTime
         currentLevel = playerLevel
     else
         -- First-time failure - don't allocate time, keep at 0
         timeRemainingThisLevel = 0
         originalTimeAllocationThisLevel = 0
+        maxTimeRemainingThisLevel = 0
         currentLevel = playerLevel
     end
     
@@ -267,6 +284,7 @@ local function SaveCharacterData()
         level = currentLevel,
         timeRemainingThisLevel = timeRemainingThisLevel,
         originalTimeAllocationThisLevel = originalTimeAllocationThisLevel,
+        maxTimeRemainingThisLevel = maxTimeRemainingThisLevel,
         totalTimePlayed = totalTimePlayed,
         lastUpdateTime = timeAtLastUpdate,
         hasFailed = hasFailed,
@@ -312,6 +330,134 @@ local function GetDarknessLevel()
     else
         return 4
     end
+end
+
+-- Calculate time until next darkness level (or failure)
+-- Returns time in seconds until next darkness threshold, or nil if no darkness will occur
+-- Note: Calculates even when resting (timer paused but thresholds still apply)
+-- Note: Factors in bonus time from achievements and professions
+local function GetTimeUntilNextDarkness()
+    if hasFailed or hasWon or isOnFlightPath then
+        return nil
+    end
+    
+    -- Calculate total time allocation including bonus time
+    -- Bonus time is the difference between current time remaining and original allocation
+    -- (when time remaining exceeds original, bonus time has been added)
+    -- Total allocation = original + bonus = timeRemainingThisLevel (at level start)
+    -- Since timeRemainingThisLevel decreases over time, we need to calculate total allocation
+    -- by finding when bonuses were added and tracking the maximum time remaining
+    
+    -- The total allocation is the maximum timeRemainingThisLevel has been this level
+    -- We can approximate it: if timeRemainingThisLevel > originalTimeAllocationThisLevel,
+    -- then totalAllocation = timeRemainingThisLevel (current includes bonuses)
+    -- Otherwise, totalAllocation = originalTimeAllocationThisLevel (no bonuses added yet)
+    
+    local originalAllocation = originalTimeAllocationThisLevel
+    if originalAllocation == 0 then
+        return nil
+    end
+    
+    -- Calculate total allocation (original + bonuses)
+    -- If current time remaining is greater than original, bonuses have been added
+    -- Total allocation is the maximum time remaining has been (which includes bonuses)
+    -- Since we don't track max, we use: if current > original, total = current; else total = original
+    -- But this doesn't work well as time passes...
+    
+    -- Better approach: track bonus time separately, or calculate it from the difference
+    -- Actually, the simplest: use timeRemainingThisLevel as the base for percentage,
+    -- but we need to know what it was at level start. Since we don't track that,
+    -- we'll use: totalAllocation = max(originalAllocation, timeRemainingThisLevel)
+    -- This works because if bonuses were added, timeRemainingThisLevel would be > original
+    
+    -- Wait, but timeRemainingThisLevel decreases, so if it started at 15 mins (10+5 bonus)
+    -- and is now at 12 mins, we'd calculate thresholds based on 12 mins, not 15.
+    
+    -- Best approach: Calculate total allocation by tracking when bonuses are added
+    -- For now, let's use: if timeRemainingThisLevel > originalAllocation, 
+    -- then totalAllocation = timeRemainingThisLevel (assumes bonuses were just added)
+    -- Otherwise, use originalAllocation
+    
+    -- Actually, the most accurate: calculate percentage based on current time remaining
+    -- vs total allocation. Total allocation = original + bonus.
+    -- Bonus = timeRemainingThisLevel - originalAllocation (if positive, at level start)
+    -- But we need the starting value...
+    
+    -- Let me think: when level starts, timeRemainingThisLevel = originalAllocation + bonuses
+    -- As time passes, timeRemainingThisLevel decreases
+    -- So: totalAllocationAtStart = timeRemainingThisLevel (at level start)
+    -- Since we don't track start value, we approximate:
+    -- If timeRemainingThisLevel > originalAllocation, bonuses were added
+    -- Total allocation ≈ timeRemainingThisLevel (current, assuming not much time passed)
+    -- But this breaks as time passes...
+    
+    -- Better: Track the maximum timeRemainingThisLevel has been this level
+    -- For now, let's use a simpler approach: calculate thresholds based on 
+    -- percentage of total time available, where total = original + estimated bonus
+    
+    -- Use max time remaining (includes bonuses) as total allocation
+    -- This accurately reflects the total time available including all bonuses
+    local totalAllocation = maxTimeRemainingThisLevel
+    -- Fallback to original allocation if max hasn't been set yet
+    if totalAllocation == 0 then
+        totalAllocation = originalAllocation
+    end
+    
+    -- Calculate darkness level based on time percentage (even when resting)
+    -- This allows us to show time until darkness even when timer is paused
+    -- Use total allocation (including bonuses) for percentage calculation
+    local timePercent = (timeRemainingThisLevel / totalAllocation) * 100
+    local currentDarknessLevel = 0
+    
+    -- Calculate darkness level based on percentage (same logic as GetDarknessLevel but without resting check)
+    if timePercent > 50 then
+        currentDarknessLevel = 0
+    elseif timePercent > 25 then
+        currentDarknessLevel = 1
+    elseif timePercent > 10 then
+        currentDarknessLevel = 2
+    elseif timePercent > 5 then
+        currentDarknessLevel = 3
+    else
+        currentDarknessLevel = 4
+    end
+    
+    -- Calculate time until next threshold based on current darkness level
+    local nextThresholdPercent = nil
+    
+    if currentDarknessLevel == 0 then
+        -- No darkness yet - next threshold is 50% (when darkness level 1 starts)
+        nextThresholdPercent = 50
+    elseif currentDarknessLevel == 1 then
+        -- Level 1 darkness - next threshold is 25% (when darkness level 2 starts)
+        nextThresholdPercent = 25
+    elseif currentDarknessLevel == 2 then
+        -- Level 2 darkness - next threshold is 10% (when darkness level 3 starts)
+        nextThresholdPercent = 10
+    elseif currentDarknessLevel == 3 then
+        -- Level 3 darkness - next threshold is 5% (when darkness level 4 starts)
+        nextThresholdPercent = 5
+    elseif currentDarknessLevel == 4 then
+        -- Maximum darkness - next threshold is 0% (when failure occurs)
+        nextThresholdPercent = 0
+    end
+    
+    if nextThresholdPercent == nil then
+        return nil
+    end
+    
+    -- Calculate time remaining at the threshold (using total allocation including bonuses)
+    local timeAtThreshold = (totalAllocation * nextThresholdPercent) / 100
+    
+    -- Calculate time until threshold (current time remaining - time at threshold)
+    local timeUntilThreshold = timeRemainingThisLevel - timeAtThreshold
+    
+    -- Return 0 if we're already at or past the threshold
+    if timeUntilThreshold <= 0 then
+        return 0
+    end
+    
+    return timeUntilThreshold
 end
 
 -- Show tunnel vision overlay (based on UltraHardcore implementation)
@@ -652,6 +798,8 @@ local function OnLevelUp(newLevel)
     -- Set original allocation to base + rolled-over time (for darkness percentage calculation)
     -- This excludes any bonus time that may have been added from professions/achievements
     originalTimeAllocationThisLevel = previousTimeRemaining + newLevelTime
+    -- Initialize max time remaining (will be updated when bonuses are added)
+    maxTimeRemainingThisLevel = timeRemainingThisLevel
     
     -- Remove darkness on level up
     RemoveTunnelVision()
@@ -860,6 +1008,10 @@ local function SetupAchievementIntegration()
         if not hasFailed and not hasWon and HardcoreAchievements then
             -- Add 1 hour (3600 seconds) to failure timer when achievement is completed
             timeRemainingThisLevel = timeRemainingThisLevel + 3600
+            -- Update max time remaining to include bonus time
+            if timeRemainingThisLevel > maxTimeRemainingThisLevel then
+                maxTimeRemainingThisLevel = timeRemainingThisLevel
+            end
             
             -- Update UI to reflect the bonus time
             UpdateStatisticsPanel()
@@ -1164,6 +1316,10 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
             if isProfession and skillLevel then
                 -- Profession skill leveled up - add 1 minute (60 seconds) to failure timer
                 timeRemainingThisLevel = timeRemainingThisLevel + 60
+                -- Update max time remaining to include bonus time
+                if timeRemainingThisLevel > maxTimeRemainingThisLevel then
+                    maxTimeRemainingThisLevel = timeRemainingThisLevel
+                end
                 
                 -- Update UI to reflect the bonus time
                 UpdateStatisticsPanel()
@@ -1227,5 +1383,7 @@ HardcoreDeathrace.FormatPlayedTime = FormatPlayedTime
 HardcoreDeathrace.FormatPlayedTimeFull = FormatPlayedTimeFull
 HardcoreDeathrace.GetTimeForLevel = function(level) return TIME_PER_LEVEL[level] or TIME_PER_LEVEL[1] end
 HardcoreDeathrace.GetOriginalTimeAllocation = function() return originalTimeAllocationThisLevel end
+HardcoreDeathrace.GetDarknessLevel = GetDarknessLevel
+HardcoreDeathrace.GetTimeUntilNextDarkness = GetTimeUntilNextDarkness
 
 

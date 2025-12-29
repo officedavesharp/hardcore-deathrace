@@ -61,7 +61,7 @@ function CreateStatisticsPanel()
     -- Create main frame
     statsFrame = CreateFrame('Frame', 'HardcoreDeathraceStatsFrame', UIParent)
     -- Reduced width from 250 to 230 to account for shorter "Failure:" text (was "Failure Timer:")
-    -- Increased height from 105 to 112 to add more bottom padding
+    -- Height reduced from 132 to 112 since Score row is hidden (shown on failure screen only)
     statsFrame:SetSize(230, 112)
     
     -- Load saved position or use default
@@ -181,11 +181,28 @@ function CreateStatisticsPanel()
     levelValue:SetText('1')
     statsFrame.levelValue = levelValue
     
+    -- Darkness Falls (Time until next darkness level)
+    local darknessLabel = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+    -- Position after Level row with 20px gap
+    darknessLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 14, -62)
+    -- Increased font size from 13 to 14
+    darknessLabel:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
+    darknessLabel:SetText('Darkness Falls:')
+    statsFrame.darknessLabel = darknessLabel
+    
+    local darknessValue = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontHighlight')
+    -- Position value independently after the label (no alignment with other values)
+    darknessValue:SetPoint('LEFT', darknessLabel, 'RIGHT', 8, 0)
+    -- Increased font size from 13 to 14
+    darknessValue:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
+    darknessValue:SetText('') -- Blank until data loads
+    statsFrame.darknessValue = darknessValue
+    
     -- Time Remaining (This Level)
     local timeRemainingLabel = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
     -- Increased left padding from 10px to 14px
-    -- Adjusted from -58 to -62 to maintain 20px gap after Level row moved to -42
-    timeRemainingLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 14, -62)
+    -- Adjusted to maintain 20px gap after Darkness Falls row moved to -62
+    timeRemainingLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 14, -82)
     -- Increased font size from 13 to 14
     timeRemainingLabel:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
     timeRemainingLabel:SetText('Failure:')
@@ -201,30 +218,20 @@ function CreateStatisticsPanel()
     timeRemainingValue:SetText('') -- Blank until data loads
     statsFrame.timeRemainingValue = timeRemainingValue
     
-    -- Total Time Played
+    -- Score row is hidden from tracker (shown on failure screen only)
+    -- Create hidden elements to maintain compatibility with UpdateStatisticsPanel
     local totalTimeLabel = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    -- Increased left padding from 10px to 14px
-    -- Adjusted from -78 to -82 to maintain 20px gap after Failure row moved to -62
-    totalTimeLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 14, -82)
-    -- Increased font size from 13 to 14
-    totalTimeLabel:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
-    totalTimeLabel:SetText('Score:')
+    totalTimeLabel:Hide() -- Hidden - score shown on failure screen only
     statsFrame.totalTimeLabel = totalTimeLabel
     
     local totalTimeValue = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontHighlight')
-    -- Position value at same fixed X offset to align with other values
-    totalTimeValue:SetPoint('LEFT', statsFrame, 'LEFT', 76 * fontScale, 0)
-    -- Align vertically with its label
-    totalTimeValue:SetPoint('TOP', totalTimeLabel, 'TOP', 0, 0)
-    -- Increased font size from 13 to 14
-    totalTimeValue:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
-    totalTimeValue:SetText('') -- Blank until data loads
+    totalTimeValue:Hide() -- Hidden - score shown on failure screen only
     statsFrame.totalTimeValue = totalTimeValue
     
     -- Status indicator (Resting/Paused)
     local statusLabel = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    -- Even padding: adjusted spacing to create balanced bottom padding (12px from bottom)
-    statusLabel:SetPoint('TOP', totalTimeValue, 'BOTTOM', 0, -4)
+    -- Position relative to Failure row instead of Score row (since Score is hidden)
+    statusLabel:SetPoint('TOP', timeRemainingValue, 'BOTTOM', 0, -4)
     -- Increased left padding from 10px to 14px to match other elements
     statusLabel:SetPoint('LEFT', statsFrame, 'LEFT', 14, 0)
     statusLabel:SetPoint('RIGHT', statsFrame, 'RIGHT', -5, 0)
@@ -255,6 +262,57 @@ function UpdateStatisticsPanel()
         statsFrame.levelValue:SetText(tostring(failureLevel))
     else
         statsFrame.levelValue:SetText(tostring(currentLevel))
+    end
+    
+    -- Update darkness falls timer
+    if hasFailed or hasWon then
+        -- Hide or show empty when failed/won
+        statsFrame.darknessValue:SetText('')
+    else
+        local timeUntilDarkness = HardcoreDeathrace.GetTimeUntilNextDarkness()
+        local isOnFlightPath = HardcoreDeathrace.IsOnFlightPath()
+        
+        -- Always use white color for darkness falls timer
+        statsFrame.darknessValue:SetTextColor(1, 1, 1) -- White
+        
+        if timeUntilDarkness == nil or timeUntilDarkness < 0 then
+            -- Only show N/A when on flight path (timer paused and moving)
+            if isOnFlightPath then
+                statsFrame.darknessValue:SetText('N/A')
+            else
+                -- Should not happen, but fallback
+                statsFrame.darknessValue:SetText('N/A')
+            end
+        elseif timeUntilDarkness == 0 then
+            -- Already at threshold - calculate current darkness level based on time percentage
+            local timeRemaining = HardcoreDeathrace.GetTimeRemaining()
+            local timeForLevel = HardcoreDeathrace.GetOriginalTimeAllocation() or 1800
+            local timePercent = (timeRemaining / timeForLevel) * 100
+            local currentDarknessLevel = 0
+            
+            -- Calculate darkness level (same logic as GetDarknessLevel but without resting check)
+            if timePercent > 50 then
+                currentDarknessLevel = 0
+            elseif timePercent > 25 then
+                currentDarknessLevel = 1
+            elseif timePercent > 10 then
+                currentDarknessLevel = 2
+            elseif timePercent > 5 then
+                currentDarknessLevel = 3
+            else
+                currentDarknessLevel = 4
+            end
+            
+            if currentDarknessLevel == 4 then
+                statsFrame.darknessValue:SetText('Max Darkness')
+            else
+                statsFrame.darknessValue:SetText('Level ' .. (currentDarknessLevel + 1))
+            end
+        else
+            -- Show time until next darkness level
+            local darknessFormatted = HardcoreDeathrace.FormatPlayedTime(timeUntilDarkness)
+            statsFrame.darknessValue:SetText(darknessFormatted)
+        end
     end
     
     -- Update time remaining with color coding (in /played format)
