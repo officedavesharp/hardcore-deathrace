@@ -166,6 +166,7 @@ function UpdateStatisticsPanel()
     local timeRemaining = HardcoreDeathrace.GetTimeRemaining()
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
     local isResting = HardcoreDeathrace.IsResting()
+    local isOnFlightPath = HardcoreDeathrace.IsOnFlightPath()
     local hasFailed = HardcoreDeathrace.HasFailed()
     local hasWon = HardcoreDeathrace.HasWon()
     local failureLevel = HardcoreDeathrace.GetFailureLevel()
@@ -191,8 +192,8 @@ function UpdateStatisticsPanel()
         local timePercent = (timeRemaining / timeForLevel) * 100
         
         -- Set color based on time remaining percentage
-        if isResting then
-            -- Light blue/cyan when resting (same as old "(Paused)" color)
+        if isResting or isOnFlightPath then
+            -- Light blue/cyan when resting or on flight path (timer paused)
             statsFrame.timeRemainingValue:SetTextColor(0, 1, 1)
         elseif timePercent > 75 then
             -- Green from 100% to 75%
@@ -217,7 +218,7 @@ function UpdateStatisticsPanel()
     -- Update total time played (score) in /played format
     statsFrame.totalTimeValue:SetText(HardcoreDeathrace.FormatPlayedTime(totalTimePlayed))
     
-    -- Update status (FAILED is now shown in the timer itself)
+    -- Update status (flight path pause is indicated by cyan timer color, no text needed)
     if hasFailed then
         statsFrame.statusLabel:SetText('')
     else

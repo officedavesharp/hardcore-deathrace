@@ -89,6 +89,7 @@ local timeRemainingThisLevel = 0  -- Time remaining for current level (in second
 local totalTimePlayed = 0         -- Total time played excluding rested areas (in seconds)
 local timeAtLastUpdate = 0        -- Timestamp of last update
 local isResting = false           -- Whether player is currently in a rested area
+local isOnFlightPath = false      -- Whether player is currently on a flight path
 local isPaused = false            -- Whether timer is paused
 local hasFailed = false           -- Whether the deathrace has failed
 local hasWon = false              -- Whether the deathrace has been won (reached level 60)
@@ -270,7 +271,7 @@ end
 -- Thresholds: 50% -> level 1, 25% -> level 2, 10% -> level 3, 5% -> level 4
 -- Returns 0 (no darkness) to 4 (maximum darkness)
 local function GetDarknessLevel()
-    if hasFailed or isResting then
+    if hasFailed or isResting or isOnFlightPath then
         return 0
     end
     
@@ -453,11 +454,29 @@ local function UpdateTimer()
         return
     end
     
+    -- Check if player is on a flight path (check every update)
+    local wasOnFlightPath = isOnFlightPath
+    isOnFlightPath = UnitOnTaxi and UnitOnTaxi("player") or false
+    
+    -- If flight path status changed, update darkness overlay
+    if isOnFlightPath ~= wasOnFlightPath then
+        if isOnFlightPath then
+            -- Just boarded flight path - remove darkness
+            RemoveTunnelVision()
+            previousDarknessLevel = 0
+        else
+            -- Just disembarked flight path - restore darkness if needed
+            UpdateDarkness(false)
+        end
+        -- Update UI to reflect status change
+        UpdateStatisticsPanel()
+    end
+    
     local currentTime = time()
     local deltaTime = currentTime - timeAtLastUpdate
     
-    -- Only count time if not resting
-    if not isResting then
+    -- Only count time if not resting and not on flight path
+    if not isResting and not isOnFlightPath then
         -- Check for failure BEFORE updating (to capture correct score)
         if timeRemainingThisLevel - deltaTime <= 0 then
             -- Timer ran out - add remaining time to totalTimePlayed before failing
@@ -782,6 +801,7 @@ HardcoreDeathrace:RegisterEvent('PLAYER_LOGOUT')
 HardcoreDeathrace:RegisterEvent('PLAYER_ENTERING_WORLD')
 HardcoreDeathrace:RegisterEvent('PLAYER_XP_UPDATE') -- Track XP changes for anti-cheat
 HardcoreDeathrace:RegisterEvent('CHAT_MSG_SKILL') -- Detect profession skill level ups
+HardcoreDeathrace:RegisterEvent('PLAYER_CONTROL_GAINED') -- Detect when flight path ends (player regains control)
 
 -- Event handler
 HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
@@ -799,7 +819,10 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
         InitializeCharacterData()
         -- Check if player is resting on login
         isResting = IsResting()
-        if isResting then
+        -- Check if player is on a flight path on login
+        isOnFlightPath = UnitOnTaxi and UnitOnTaxi("player") or false
+        
+        if isResting or isOnFlightPath then
             RemoveTunnelVision()
             previousDarknessLevel = 0
         else
@@ -835,7 +858,10 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
     elseif event == 'PLAYER_ENTERING_WORLD' then
         -- Check if player is resting when entering world (handles zoning/reload)
         isResting = IsResting()
-        if isResting then
+        -- Check if player is on a flight path when entering world
+        isOnFlightPath = UnitOnTaxi and UnitOnTaxi("player") or false
+        
+        if isResting or isOnFlightPath then
             RemoveTunnelVision()
             previousDarknessLevel = 0
         else
@@ -848,6 +874,8 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
         end
         -- Check for XP cheating when entering world
         CheckXPCheat()
+        -- Update UI to reflect flight path status
+        UpdateStatisticsPanel()
     elseif event == 'PLAYER_XP_UPDATE' then
         -- Track XP changes and check for cheating
         if not hasFailed and not hasWon then
@@ -903,6 +931,20 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
                 SaveCharacterData()
             end
         end
+    elseif event == 'PLAYER_CONTROL_GAINED' then
+        -- Player regained control (flight path ended, or other control loss ended)
+        -- Check if we were on a flight path and update status accordingly
+        -- This event fires when the flight path ends (player lands)
+        local wasOnFlightPath = isOnFlightPath
+        isOnFlightPath = UnitOnTaxi and UnitOnTaxi("player") or false
+        
+        -- If we just landed from a flight path, restore darkness overlay
+        if wasOnFlightPath and not isOnFlightPath then
+            -- Just disembarked flight path - restore darkness if needed
+            UpdateDarkness(false)
+            -- Update UI to reflect status change
+            UpdateStatisticsPanel()
+        end
     end
 end)
 
@@ -911,6 +953,7 @@ HardcoreDeathrace.GetCurrentLevel = function() return currentLevel end
 HardcoreDeathrace.GetTimeRemaining = function() return timeRemainingThisLevel end
 HardcoreDeathrace.GetTotalTimePlayed = function() return totalTimePlayed end
 HardcoreDeathrace.IsResting = function() return isResting end
+HardcoreDeathrace.IsOnFlightPath = function() return isOnFlightPath end
 HardcoreDeathrace.HasFailed = function() return hasFailed end
 HardcoreDeathrace.HasWon = function() return hasWon end
 HardcoreDeathrace.GetFailureLevel = function() return failureLevel end
