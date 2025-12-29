@@ -86,6 +86,7 @@ local TOTAL_XP_TABLE = {
 -- Current state variables
 local currentLevel = 1
 local timeRemainingThisLevel = 0  -- Time remaining for current level (in seconds)
+local originalTimeAllocationThisLevel = 0  -- Original time allocation for current level (base + rolled-over, excluding bonuses) - used for darkness percentage calculation
 local totalTimePlayed = 0         -- Total time played excluding rested areas (in seconds)
 local timeAtLastUpdate = 0        -- Timestamp of last update
 local isResting = false           -- Whether player is currently in a rested area
@@ -218,17 +219,30 @@ local function InitializeCharacterData()
         local previousTimeRemaining = charData.timeRemainingThisLevel or 0
         local newLevelTime = TIME_PER_LEVEL[playerLevel] or TIME_PER_LEVEL[1]
         timeRemainingThisLevel = previousTimeRemaining + newLevelTime
+        -- Set original allocation to base + rolled-over time (for darkness percentage calculation)
+        originalTimeAllocationThisLevel = previousTimeRemaining + newLevelTime
         currentLevel = playerLevel
     elseif charData.timeRemainingThisLevel and charData.timeRemainingThisLevel > 0 then
         -- Use saved time remaining
         timeRemainingThisLevel = charData.timeRemainingThisLevel
+        -- Load original allocation if saved, otherwise calculate it (for backwards compatibility)
+        if charData.originalTimeAllocationThisLevel then
+            originalTimeAllocationThisLevel = charData.originalTimeAllocationThisLevel
+        else
+            -- Backwards compatibility: estimate original allocation as base level time
+            -- This won't be perfect for old saves with rolled-over time, but it's better than nothing
+            originalTimeAllocationThisLevel = TIME_PER_LEVEL[playerLevel] or TIME_PER_LEVEL[1]
+        end
     elseif not isFirstTimeFailure then
         -- Starting fresh - allocate time for current level (unless first-time failure)
-        timeRemainingThisLevel = TIME_PER_LEVEL[playerLevel] or TIME_PER_LEVEL[1]
+        local baseTime = TIME_PER_LEVEL[playerLevel] or TIME_PER_LEVEL[1]
+        timeRemainingThisLevel = baseTime
+        originalTimeAllocationThisLevel = baseTime
         currentLevel = playerLevel
     else
         -- First-time failure - don't allocate time, keep at 0
         timeRemainingThisLevel = 0
+        originalTimeAllocationThisLevel = 0
         currentLevel = playerLevel
     end
     
@@ -252,6 +266,7 @@ local function SaveCharacterData()
     HardcoreDeathraceDB[charKey] = {
         level = currentLevel,
         timeRemainingThisLevel = timeRemainingThisLevel,
+        originalTimeAllocationThisLevel = originalTimeAllocationThisLevel,
         totalTimePlayed = totalTimePlayed,
         lastUpdateTime = timeAtLastUpdate,
         hasFailed = hasFailed,
@@ -270,12 +285,15 @@ end
 -- Darkness starts at 50% time remaining
 -- Thresholds: 50% -> level 1, 25% -> level 2, 10% -> level 3, 5% -> level 4
 -- Returns 0 (no darkness) to 4 (maximum darkness)
+-- Uses originalTimeAllocationThisLevel (base + rolled-over time) for percentage calculation
+-- Bonus time from professions/achievements extends timer but doesn't affect thresholds
 local function GetDarknessLevel()
     if hasFailed or isResting or isOnFlightPath then
         return 0
     end
     
-    local timeForLevel = GetTimeForLevel(currentLevel)
+    -- Use original time allocation (base + rolled-over, excluding bonuses) for percentage calculation
+    local timeForLevel = originalTimeAllocationThisLevel
     if timeForLevel == 0 then
         return 0
     end
@@ -631,6 +649,9 @@ local function OnLevelUp(newLevel)
     
     currentLevel = newLevel
     timeRemainingThisLevel = previousTimeRemaining + newLevelTime
+    -- Set original allocation to base + rolled-over time (for darkness percentage calculation)
+    -- This excludes any bonus time that may have been added from professions/achievements
+    originalTimeAllocationThisLevel = previousTimeRemaining + newLevelTime
     
     -- Remove darkness on level up
     RemoveTunnelVision()
@@ -1205,5 +1226,6 @@ HardcoreDeathrace.FormatTime = FormatTime
 HardcoreDeathrace.FormatPlayedTime = FormatPlayedTime
 HardcoreDeathrace.FormatPlayedTimeFull = FormatPlayedTimeFull
 HardcoreDeathrace.GetTimeForLevel = function(level) return TIME_PER_LEVEL[level] or TIME_PER_LEVEL[1] end
+HardcoreDeathrace.GetOriginalTimeAllocation = function() return originalTimeAllocationThisLevel end
 
 

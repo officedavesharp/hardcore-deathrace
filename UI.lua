@@ -267,8 +267,10 @@ function UpdateStatisticsPanel()
         statsFrame.timeRemainingValue:SetTextColor(1, 0, 0)
     else
         local timeRemainingFormatted = HardcoreDeathrace.FormatPlayedTime(timeRemaining)
-        local timeForLevel = HardcoreDeathrace.GetTimeForLevel(currentLevel) or 1800
-        local timePercent = (timeRemaining / timeForLevel) * 100
+        -- Use original time allocation (base + rolled-over, excluding bonuses) for percentage calculation
+        -- This matches the darkness calculation so colors sync with darkness levels
+        local originalTimeAllocation = HardcoreDeathrace.GetOriginalTimeAllocation() or 1800
+        local timePercent = (timeRemaining / originalTimeAllocation) * 100
         
         -- Set color based on time remaining percentage
         if isResting or isOnFlightPath then
