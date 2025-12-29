@@ -448,9 +448,70 @@ local function UpdateDarkness(instant)
     end
 end
 
+-- Forward declaration for AnnounceFailure (defined later after FormatPlayedTime)
+local AnnounceFailure
+
+-- Handle player death - pause timer and fail the run
+local function OnPlayerDeath()
+    -- Only process death if not already failed or won
+    if hasFailed or hasWon then
+        return
+    end
+    
+    -- Pause the timer immediately
+    isPaused = true
+    
+    -- Mark as failed
+    hasFailed = true
+    failureLevel = currentLevel -- Save the level at which they died
+    
+    -- Save the current time played up to this point
+    -- Calculate any remaining time that should be added to totalTimePlayed
+    local currentTime = time()
+    local deltaTime = currentTime - timeAtLastUpdate
+    
+    -- Only add time if not resting and not on flight path (same logic as UpdateTimer)
+    if not isResting and not isOnFlightPath and deltaTime > 0 then
+        -- Add the time that passed since last update to totalTimePlayed
+        if timeRemainingThisLevel - deltaTime > 0 then
+            -- Time remaining would still be positive, so add the deltaTime to totalTimePlayed
+            totalTimePlayed = totalTimePlayed + deltaTime
+            timeRemainingThisLevel = timeRemainingThisLevel - deltaTime
+        else
+            -- Time would have run out anyway, add remaining time
+            local remainingTime = timeRemainingThisLevel
+            totalTimePlayed = totalTimePlayed + remainingTime
+            timeRemainingThisLevel = 0
+        end
+        timeAtLastUpdate = currentTime
+    end
+    
+    -- Save character data
+    SaveCharacterData()
+    
+    -- Announce failure
+    AnnounceFailure()
+    
+    -- Show tunnel_vision_5.png (all black) when player dies
+    RemoveTunnelVision()
+    ShowTunnelVision(5, false) -- Show instantly, no fade
+    
+    -- Show failure screen
+    ShowFailureScreen()
+    
+    -- Update UI to show FAILED
+    UpdateStatisticsPanel()
+end
+
 -- Update timer and check for failure
 local function UpdateTimer()
     if hasFailed or hasWon or isPaused then
+        return
+    end
+    
+    -- Check if player is dead (backup check in case UNIT_DIED event doesn't fire)
+    if UnitIsDead and UnitIsDead("player") then
+        OnPlayerDeath()
         return
     end
     
@@ -664,8 +725,8 @@ local function FormatPlayedTimeFull(seconds)
     return table.concat(parts, ", ")
 end
 
--- Announce failure to guild/party or say chat
-local function AnnounceFailure()
+-- Announce failure to guild/party or say chat (assign to forward-declared variable)
+AnnounceFailure = function()
     -- Format time played in full format
     local timeText = FormatPlayedTimeFull(totalTimePlayed)
     
@@ -960,6 +1021,7 @@ HardcoreDeathrace:RegisterEvent('CHAT_MSG_SKILL') -- Detect profession skill lev
 HardcoreDeathrace:RegisterEvent('PLAYER_CONTROL_GAINED') -- Detect when flight path ends (player regains control)
 HardcoreDeathrace:RegisterEvent('GROUP_JOINED') -- Detect when player joins a party/raid
 HardcoreDeathrace:RegisterEvent('GROUP_ROSTER_UPDATE') -- Detect when party/raid roster changes
+HardcoreDeathrace:RegisterEvent('PLAYER_DEAD') -- Detect when player dies
 
 -- Event handler
 HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
@@ -1124,6 +1186,9 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
     elseif event == 'GROUP_ROSTER_UPDATE' then
         -- Send Hardcore Deathrace warning message when group roster updates (someone joins/leaves)
         SendGroupDeathraceMessage()
+    elseif event == 'PLAYER_DEAD' then
+        -- Player died - pause timer and fail the run
+        OnPlayerDeath()
     end
 end)
 
