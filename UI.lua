@@ -8,6 +8,43 @@ local failureFrame = nil
 HardcoreDeathraceDB = HardcoreDeathraceDB or {}
 HardcoreDeathraceDB.settings = HardcoreDeathraceDB.settings or {}
 
+-- UI Scaling Configuration
+-- Calculate font/ spacing scale to ensure text fits properly at all resolutions
+-- Box size stays fixed, only fonts and spacing scale
+local function GetFontScale()
+    -- Get current screen resolution
+    local screenWidth = UIParent:GetWidth()
+    local screenHeight = UIParent:GetHeight()
+    
+    -- Reference resolution: 1920x1080 (where the UI was designed and text overflow was reported)
+    -- At this resolution, scale should be 1.0 (no scaling)
+    local REFERENCE_WIDTH = 1920
+    local REFERENCE_HEIGHT = 1080
+    
+    -- Calculate scale based on both width and height
+    -- Use the smaller scale to ensure text fits both horizontally and vertically
+    -- This prevents overflow in both dimensions
+    local scaleX = screenWidth / REFERENCE_WIDTH
+    local scaleY = screenHeight / REFERENCE_HEIGHT
+    local scale = math.min(scaleX, scaleY)
+    
+    -- Apply more aggressive scaling at lower resolutions
+    -- Use a slightly more aggressive curve to ensure fonts scale down enough
+    -- This helps prevent text overflow at very low resolutions
+    if scale < 1.0 then
+        -- At lower resolutions, apply additional scaling factor to be more aggressive
+        -- This ensures fonts scale down enough to prevent overflow
+        scale = scale * 0.95  -- Additional 5% reduction for safety margin
+    end
+    
+    -- Clamp scale to ensure fonts scale DOWN at lower resolutions
+    -- Minimum 0.55 ensures fonts scale down enough at very low resolutions (e.g., 720p, 800x600)
+    -- Maximum 1.0 ensures fonts never exceed original size (prevents overflow)
+    -- Lowered minimum from 0.65 to 0.55 to be more aggressive at preventing overflow
+    scale = math.max(0.55, math.min(1.0, scale))
+    
+    return scale
+end
 
 -- Initialize UI elements
 function InitializeUI()
@@ -17,9 +54,15 @@ end
 
 -- Create statistics panel
 function CreateStatisticsPanel()
+    -- Get font/spacing scale factor for current resolution
+    -- Box size stays fixed, only fonts and spacing scale
+    local fontScale = GetFontScale()
+    
     -- Create main frame
     statsFrame = CreateFrame('Frame', 'HardcoreDeathraceStatsFrame', UIParent)
-    statsFrame:SetSize(250, 105)
+    -- Reduced width from 250 to 230 to account for shorter "Failure:" text (was "Failure Timer:")
+    -- Increased height from 105 to 112 to add more bottom padding
+    statsFrame:SetSize(230, 112)
     
     -- Load saved position or use default
     -- Ensure settings table exists
@@ -34,10 +77,11 @@ function CreateStatisticsPanel()
     if settings.statsFramePoint and settings.statsFrameRelativePoint and 
        settings.statsFrameX and settings.statsFrameY then
         -- Use saved position (always relative to UIParent)
+        -- Saved positions are in original coordinates, use as-is
         statsFrame:SetPoint(settings.statsFramePoint, UIParent, settings.statsFrameRelativePoint, 
                            settings.statsFrameX, settings.statsFrameY)
     else
-        -- Use default position
+        -- Use default position (original offsets: -40, 80)
         statsFrame:SetPoint('BOTTOMRIGHT', UIParent, 'BOTTOMRIGHT', -40, 80)
     end
     
@@ -52,6 +96,7 @@ function CreateStatisticsPanel()
     statsFrame.bg = bg
     
     -- Create simple border using solid color lines (Classic Era compatible)
+    -- Keep border size fixed (base size: 2) - don't scale borders
     local borderSize = 2
     local borderColor = {0.6, 0.6, 0.6, 1} -- Light gray border
     
@@ -97,6 +142,7 @@ function CreateStatisticsPanel()
             HardcoreDeathraceDB.settings = {}
         end
         -- Save the new position (always relative to UIParent)
+        -- Positions are saved in scaled coordinates, which is correct
         local point, relativeTo, relativePoint, xOfs, yOfs = self:GetPoint()
         HardcoreDeathraceDB.settings.statsFramePoint = point
         HardcoreDeathraceDB.settings.statsFrameRelativePoint = relativePoint
@@ -107,51 +153,84 @@ function CreateStatisticsPanel()
     
     -- Title
     local title = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormalLarge')
-    title:SetPoint('TOP', statsFrame, 'TOP', 0, -10)
-    -- Try Morpheus for gothic look, alternatives: 'Fonts\\SKURRI.TTF' or 'Fonts\\FRIZQT__.TTF'
-    title:SetFont('Fonts\\MORPHEUS.TTF', 20, 'OUTLINE') -- Morpheus gothic font
+    -- Even padding: 12px from top (was 10px)
+    title:SetPoint('TOP', statsFrame, 'TOP', 0, -12)
+    -- Increased font size from 20 to 22
+    title:SetFont('Fonts\\MORPHEUS.TTF', 22 * fontScale, 'OUTLINE') -- Morpheus gothic font
     title:SetText('|cFFFF0000Hardcore Deathrace|r')
     statsFrame.title = title
     
     -- Current Level
     local levelLabel = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    levelLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 10, -35)
+    -- Increased left padding from 10px to 14px for better spacing from left edge
+    -- Increased padding from title: moved from -38 to -42 to add more space between title and Level row
+    levelLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 14, -42)
+    -- Increased font size from 13 to 14
+    levelLabel:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
     levelLabel:SetText('Level:')
     statsFrame.levelLabel = levelLabel
     
     local levelValue = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontHighlight')
-    levelValue:SetPoint('LEFT', levelLabel, 'RIGHT', 10, 0)
+    -- Position value at fixed X offset to align all values vertically
+    -- 76px from left (increased from 72 to match increased label padding)
+    levelValue:SetPoint('LEFT', statsFrame, 'LEFT', 76 * fontScale, 0)
+    -- Align vertically with its label
+    levelValue:SetPoint('TOP', levelLabel, 'TOP', 0, 0)
+    -- Increased font size from 13 to 14
+    levelValue:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
     levelValue:SetText('1')
     statsFrame.levelValue = levelValue
     
     -- Time Remaining (This Level)
     local timeRemainingLabel = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    timeRemainingLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 10, -55)
-    timeRemainingLabel:SetText('Failure Timer:')
+    -- Increased left padding from 10px to 14px
+    -- Adjusted from -58 to -62 to maintain 20px gap after Level row moved to -42
+    timeRemainingLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 14, -62)
+    -- Increased font size from 13 to 14
+    timeRemainingLabel:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
+    timeRemainingLabel:SetText('Failure:')
     statsFrame.timeRemainingLabel = timeRemainingLabel
     
     local timeRemainingValue = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontHighlight')
-    timeRemainingValue:SetPoint('LEFT', timeRemainingLabel, 'RIGHT', 10, 0)
+    -- Position value at same fixed X offset to align with other values
+    timeRemainingValue:SetPoint('LEFT', statsFrame, 'LEFT', 76 * fontScale, 0)
+    -- Align vertically with its label
+    timeRemainingValue:SetPoint('TOP', timeRemainingLabel, 'TOP', 0, 0)
+    -- Increased font size from 13 to 14
+    timeRemainingValue:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
     timeRemainingValue:SetText('') -- Blank until data loads
     statsFrame.timeRemainingValue = timeRemainingValue
     
     -- Total Time Played
     local totalTimeLabel = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    totalTimeLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 10, -75)
+    -- Increased left padding from 10px to 14px
+    -- Adjusted from -78 to -82 to maintain 20px gap after Failure row moved to -62
+    totalTimeLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 14, -82)
+    -- Increased font size from 13 to 14
+    totalTimeLabel:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
     totalTimeLabel:SetText('Score:')
     statsFrame.totalTimeLabel = totalTimeLabel
     
     local totalTimeValue = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontHighlight')
-    totalTimeValue:SetPoint('LEFT', totalTimeLabel, 'RIGHT', 10, 0)
+    -- Position value at same fixed X offset to align with other values
+    totalTimeValue:SetPoint('LEFT', statsFrame, 'LEFT', 76 * fontScale, 0)
+    -- Align vertically with its label
+    totalTimeValue:SetPoint('TOP', totalTimeLabel, 'TOP', 0, 0)
+    -- Increased font size from 13 to 14
+    totalTimeValue:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
     totalTimeValue:SetText('') -- Blank until data loads
     statsFrame.totalTimeValue = totalTimeValue
     
     -- Status indicator (Resting/Paused)
     local statusLabel = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    statusLabel:SetPoint('TOP', totalTimeValue, 'BOTTOM', 0, -8)
-    statusLabel:SetPoint('LEFT', statsFrame, 'LEFT', 10, 0)
-    statusLabel:SetPoint('RIGHT', statsFrame, 'RIGHT', -10, 0)
+    -- Even padding: adjusted spacing to create balanced bottom padding (12px from bottom)
+    statusLabel:SetPoint('TOP', totalTimeValue, 'BOTTOM', 0, -4)
+    -- Increased left padding from 10px to 14px to match other elements
+    statusLabel:SetPoint('LEFT', statsFrame, 'LEFT', 14, 0)
+    statusLabel:SetPoint('RIGHT', statsFrame, 'RIGHT', -5, 0)
     statusLabel:SetJustifyH('CENTER')
+    -- Increased font size from 13 to 14
+    statusLabel:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
     statusLabel:SetText('')
     statsFrame.statusLabel = statusLabel
 end
@@ -228,6 +307,9 @@ end
 
 -- Create failure/win screen (reusable for both)
 function CreateFailureScreen()
+    -- Get font scale factor for current resolution
+    local fontScale = GetFontScale()
+    
     -- Destroy old frame if it exists to ensure fresh creation
     if failureFrame then
         failureFrame:Hide()
@@ -251,15 +333,18 @@ function CreateFailureScreen()
     
     -- Failure/Win message (centered) - same font as tracker title, much larger
     local failureText = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormalHuge')
-    failureText:SetPoint('CENTER', failureFrame, 'CENTER', 0, 100)
-    failureText:SetFont('Fonts\\MORPHEUS.TTF', 36, 'OUTLINE') -- Much larger font
+    -- Apply font scale to vertical offset (base offset: 100)
+    failureText:SetPoint('CENTER', failureFrame, 'CENTER', 0, 100 * fontScale)
+    -- Apply font scale to font size (base size: 36)
+    failureText:SetFont('Fonts\\MORPHEUS.TTF', 36 * fontScale, 'OUTLINE') -- Much larger font
     failureText:SetText('')
     failureFrame.failureText = failureText
     
     -- Final score value (centered, full format)
     local scoreValue = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormalHuge')
     scoreValue:SetPoint('CENTER', failureFrame, 'CENTER', 0, 0)
-    scoreValue:SetFont('Fonts\\FRIZQT__.TTF', 20)
+    -- Apply font scale to font size (base size: 20)
+    scoreValue:SetFont('Fonts\\FRIZQT__.TTF', 20 * fontScale)
     scoreValue:SetText('')
     scoreValue:SetTextColor(1, 1, 1) -- White color
     failureFrame.scoreValue = scoreValue
@@ -281,13 +366,16 @@ function CreateFailureScreen()
     
     -- Continue playing text - clickable
     local continueTextFrame = CreateFrame('Frame', nil, failureFrame)
-    continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -80)
-    continueTextFrame:SetSize(300, 30)
+    -- Apply font scale to vertical offset (base offset: -80)
+    continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -80 * fontScale)
+    -- Apply font scale to frame size (base size: 300x30)
+    continueTextFrame:SetSize(300 * fontScale, 30 * fontScale)
     continueTextFrame:EnableMouse(true)
     
     local continueText = continueTextFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
     continueText:SetPoint('CENTER', continueTextFrame, 'CENTER', 0, 0)
-    continueText:SetFont('Fonts\\FRIZQT__.TTF', 16)
+    -- Apply font scale to font size (base size: 16)
+    continueText:SetFont('Fonts\\FRIZQT__.TTF', 16 * fontScale)
     continueText:SetTextColor(1, 1, 0) -- Yellow color
     continueText:SetText('Click here to continue playing')
     continueTextFrame.text = continueText
