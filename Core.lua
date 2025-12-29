@@ -1089,7 +1089,6 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
                 SaveCharacterData()
             end
         end
-<<<<<<< HEAD
     elseif event == 'PLAYER_CONTROL_GAINED' then
         -- Player regained control (flight path ended, or other control loss ended)
         -- Check if we were on a flight path and update status accordingly
@@ -1104,11 +1103,6 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
             -- Update UI to reflect status change
             UpdateStatisticsPanel()
         end
-    elseif event == 'GROUP_JOINED' then
-        -- Initialize group tracking and send deathrace message when joining a full party
-        -- Check if player is in a party (not a raid) and if party is full (5 members)
-        local numGroupMembers = GetNumGroupMembers and GetNumGroupMembers() or 1
-        local inRaid = IsInRaid and IsInRaid() or false
     elseif event == 'GROUP_JOINED' then
         -- Initialize group tracking when first joining a group
         previousGroupMembers = GetCurrentGroupMembers()
