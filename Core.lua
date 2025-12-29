@@ -802,6 +802,8 @@ HardcoreDeathrace:RegisterEvent('PLAYER_ENTERING_WORLD')
 HardcoreDeathrace:RegisterEvent('PLAYER_XP_UPDATE') -- Track XP changes for anti-cheat
 HardcoreDeathrace:RegisterEvent('CHAT_MSG_SKILL') -- Detect profession skill level ups
 HardcoreDeathrace:RegisterEvent('PLAYER_CONTROL_GAINED') -- Detect when flight path ends (player regains control)
+HardcoreDeathrace:RegisterEvent('GROUP_JOINED') -- Detect when player joins a party/raid
+HardcoreDeathrace:RegisterEvent('GROUP_ROSTER_UPDATE') -- Detect when party/raid roster changes
 
 -- Event handler
 HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
@@ -944,6 +946,25 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
             UpdateDarkness(false)
             -- Update UI to reflect status change
             UpdateStatisticsPanel()
+        end
+    elseif event == 'GROUP_JOINED' then
+        -- Initialize group tracking and send deathrace message when joining a full party
+        -- Check if player is in a party (not a raid) and if party is full (5 members)
+        local numGroupMembers = GetNumGroupMembers and GetNumGroupMembers() or 1
+        local inRaid = IsInRaid and IsInRaid() or false
+        local inParty = not inRaid and numGroupMembers > 1
+        
+        -- If in a party and party is full (5 members), send deathrace message
+        if inParty and numGroupMembers == 5 then
+            -- Send deathrace message to party
+            if SendDeathraceMessageNow then
+                SendDeathraceMessageNow()
+            end
+        end
+    elseif event == 'GROUP_ROSTER_UPDATE' then
+        -- Send Hardcore Deathrace warning message when group roster updates
+        if SendGroupDeathraceMessage then
+            SendGroupDeathraceMessage()
         end
     end
 end)
