@@ -404,7 +404,7 @@ function ShowFailureScreen()
     CreateFailureScreen()
     
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
-    -- Show full format (days, hours, minutes, seconds)
+    -- Show full format (days, hours, mins, secs)
     failureFrame.scoreValue:SetText(HardcoreDeathrace.FormatPlayedTimeFull(totalTimePlayed))
     
     -- Set failure message
@@ -422,7 +422,7 @@ function ShowWinScreen()
     CreateFailureScreen()
     
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
-    -- Show full format (days, hours, minutes, seconds)
+    -- Show full format (days, hours, mins, secs)
     failureFrame.scoreValue:SetText(HardcoreDeathrace.FormatPlayedTimeFull(totalTimePlayed))
     
     -- Set win message (green)

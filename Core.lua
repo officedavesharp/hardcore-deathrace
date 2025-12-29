@@ -681,9 +681,9 @@ local function FormatTime(seconds)
     end
 end
 
--- Format time in /played format: "X days, Y minutes, Z seconds"
--- When days > 0, only show "X days, Y minutes" to save space
--- When days = 0, always show minutes and seconds (even if seconds is 0)
+-- Format time in /played format: "X days, Y mins, Z secs"
+-- When days > 0, only show "X days, Y mins" to save space
+-- When days = 0, always show mins and secs (even if secs is 0)
 local function FormatPlayedTime(seconds)
     if seconds < 0 then
         seconds = 0
@@ -700,7 +700,7 @@ local function FormatPlayedTime(seconds)
     if days > 0 then
         table.insert(parts, string.format("%d day%s", days, days == 1 and "" or "s"))
         if minutes > 0 then
-            table.insert(parts, string.format("%d minute%s", minutes, minutes == 1 and "" or "s"))
+            table.insert(parts, string.format("%d min%s", minutes, minutes == 1 and "" or "s"))
         end
     else
         -- No days, show hours (if > 0), minutes, and seconds
@@ -708,23 +708,23 @@ local function FormatPlayedTime(seconds)
         if hours > 0 then
             table.insert(parts, string.format("%d hour%s", hours, hours == 1 and "" or "s"))
             if minutes > 0 then
-                table.insert(parts, string.format("%d minute%s", minutes, minutes == 1 and "" or "s"))
+                table.insert(parts, string.format("%d min%s", minutes, minutes == 1 and "" or "s"))
             end
             -- Don't show seconds when hours are present
         else
             -- No hours, show minutes and seconds
             if minutes > 0 then
-                table.insert(parts, string.format("%d minute%s", minutes, minutes == 1 and "" or "s"))
+                table.insert(parts, string.format("%d min%s", minutes, minutes == 1 and "" or "s"))
             end
             -- Always show seconds when no hours (even if 0)
-            table.insert(parts, string.format("%d second%s", secs, secs == 1 and "" or "s"))
+            table.insert(parts, string.format("%d sec%s", secs, secs == 1 and "" or "s"))
         end
     end
     
     return table.concat(parts, ", ")
 end
 
--- Format time in full /played format: "X days, Y hours, Z minutes, W seconds" (always show all units)
+-- Format time in full /played format: "X days, Y hours, Z mins, W secs" (always show all units)
 local function FormatPlayedTimeFull(seconds)
     if seconds < 0 then
         seconds = 0
@@ -740,8 +740,8 @@ local function FormatPlayedTimeFull(seconds)
     -- Always show all units for full format
     table.insert(parts, string.format("%d day%s", days, days == 1 and "" or "s"))
     table.insert(parts, string.format("%d hour%s", hours, hours == 1 and "" or "s"))
-    table.insert(parts, string.format("%d minute%s", minutes, minutes == 1 and "" or "s"))
-    table.insert(parts, string.format("%d second%s", secs, secs == 1 and "" or "s"))
+    table.insert(parts, string.format("%d min%s", minutes, minutes == 1 and "" or "s"))
+    table.insert(parts, string.format("%d sec%s", secs, secs == 1 and "" or "s"))
     
     return table.concat(parts, ", ")
 end
