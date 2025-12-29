@@ -773,6 +773,162 @@ local function SetupAchievementIntegration()
     return true
 end
 
+--/*******************/ PARTY JOIN ANNOUNCEMENT SYSTEM /*************************/--
+-- System to announce Hardcore Deathrace addon usage when joining or when others join party
+
+-- Track group members to detect when new members join
+local currentGroupMembers = {}
+local previousGroupMembers = {}
+local previousGroupCount = 0
+local groupInitialized = false
+local groupMessageTimerFrame = CreateFrame("Frame")
+local groupMessageTimerElapsed = 0
+local lastMessageTime = 0
+local MESSAGE_COOLDOWN = 3.0 -- Minimum seconds between messages to prevent spam
+
+-- Function to get current group member names
+local function GetCurrentGroupMembers()
+    local members = {}
+    if IsInRaid and IsInRaid() then
+        -- In raid, use GetNumGroupMembers() and GetRaidRosterInfo()
+        local numMembers = GetNumGroupMembers()
+        for i = 1, numMembers do
+            local name = GetRaidRosterInfo(i)
+            if name then
+                members[name] = true
+            end
+        end
+    elseif IsInGroup and IsInGroup() then
+        -- In party, use GetNumGroupMembers() and UnitName("party" .. i)
+        local numMembers = GetNumGroupMembers()
+        for i = 1, numMembers do
+            local name = UnitName("party" .. i)
+            if name then
+                members[name] = true
+            end
+        end
+    end
+    -- Always include player name
+    local playerName = UnitName("player")
+    if playerName then
+        members[playerName] = true
+    end
+    return members
+end
+
+-- Helper function to actually send the Hardcore Deathrace warning message
+-- Only sends when party is full (5 members including the player)
+local function SendDeathraceMessageNow()
+    local currentTime = GetTime()
+    
+    -- Check cooldown to prevent spam
+    if currentTime - lastMessageTime >= MESSAGE_COOLDOWN then
+        -- Reset timer and start counting
+        groupMessageTimerElapsed = 0
+        groupMessageTimerFrame:SetScript("OnUpdate", function(self, delta)
+            groupMessageTimerElapsed = groupMessageTimerElapsed + delta
+            
+            -- Wait 1 second before sending to ensure group is fully formed
+            if groupMessageTimerElapsed >= 1.0 then
+                -- Stop the timer
+                self:SetScript("OnUpdate", nil)
+                groupMessageTimerElapsed = 0
+                
+                -- Double-check we're still in a party (not raid) and party is full
+                local stillInGroup = IsInGroup and IsInGroup()
+                local stillInRaid = IsInRaid and IsInRaid()
+                
+                -- Only send if in a party (not raid) and party is full (5 members)
+                if stillInGroup and not stillInRaid then
+                    local partySize = GetNumGroupMembers and GetNumGroupMembers() or 1
+                    
+                    -- Only send message when party is full (5 members including player)
+                    if partySize == 5 then
+                        -- Message to send to party chat
+                        local message = "Warning: I am using the Hardcore Deathrace addon and will be pushing the pace to survive."
+                        
+                        local success = pcall(function()
+                            SendChatMessage(message, "PARTY")
+                        end)
+                        if not success then
+                            -- Fallback to chat frame if SendChatMessage fails
+                            ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r " .. message)
+                        end
+                        
+                        -- Update last message time
+                        lastMessageTime = GetTime()
+                    end
+                end
+            end
+        end)
+    end
+end
+
+-- Function to send Hardcore Deathrace warning message to party chat
+-- Only sends when party is full (5 members including the player)
+local function SendGroupDeathraceMessage()
+    -- Check if we're in a party (not raid) using Classic WoW API
+    local inGroup = IsInGroup and IsInGroup()
+    local inRaid = IsInRaid and IsInRaid()
+    
+    -- Only process if we're in a party (not raid)
+    if inGroup and not inRaid then
+        -- Skip if not initialized yet (prevents false triggers on addon load)
+        if not groupInitialized then
+            previousGroupMembers = GetCurrentGroupMembers()
+            previousGroupCount = GetNumGroupMembers and GetNumGroupMembers() or 1
+            groupInitialized = true
+            return
+        end
+        
+        -- Get current group state
+        local currentMembers = GetCurrentGroupMembers()
+        local currentGroupCount = GetNumGroupMembers and GetNumGroupMembers() or 1
+        
+        -- Only check for new members if the group count has increased
+        -- This prevents sending messages when someone levels up or leaves
+        if currentGroupCount > previousGroupCount then
+            -- Group count increased, someone actually joined
+            local playerName = UnitName("player")
+            local hasNewMember = false
+            
+            -- Check if there are new members (excluding ourselves)
+            for name, _ in pairs(currentMembers) do
+                if not previousGroupMembers[name] and name ~= playerName then
+                    hasNewMember = true
+                    break
+                end
+            end
+            
+            -- Only send message if there's a new member AND party is full (5 members)
+            if hasNewMember and currentGroupCount == 5 then
+                SendDeathraceMessageNow()
+            end
+            
+            -- Update tracking when someone joins
+            previousGroupMembers = currentMembers
+            previousGroupCount = currentGroupCount
+        elseif currentGroupCount < previousGroupCount then
+            -- Group count decreased, someone left - update tracking but don't send message
+            previousGroupMembers = GetCurrentGroupMembers()
+            previousGroupCount = currentGroupCount
+        else
+            -- Group count unchanged, just update member list in case of name changes
+            previousGroupMembers = currentMembers
+        end
+    else
+        -- Not in a party anymore (or in raid), reset tracking
+        previousGroupMembers = {}
+        currentGroupMembers = {}
+        previousGroupCount = 0
+        groupInitialized = false
+        
+        -- Stop any pending timer
+        groupMessageTimerFrame:SetScript("OnUpdate", nil)
+        groupMessageTimerElapsed = 0
+    end
+end
+
 -- Register events
 HardcoreDeathrace:RegisterEvent('ADDON_LOADED')
 HardcoreDeathrace:RegisterEvent('PLAYER_LOGIN')
@@ -782,6 +938,8 @@ HardcoreDeathrace:RegisterEvent('PLAYER_LOGOUT')
 HardcoreDeathrace:RegisterEvent('PLAYER_ENTERING_WORLD')
 HardcoreDeathrace:RegisterEvent('PLAYER_XP_UPDATE') -- Track XP changes for anti-cheat
 HardcoreDeathrace:RegisterEvent('CHAT_MSG_SKILL') -- Detect profession skill level ups
+HardcoreDeathrace:RegisterEvent('GROUP_JOINED') -- Detect when player joins a party/raid
+HardcoreDeathrace:RegisterEvent('GROUP_ROSTER_UPDATE') -- Detect when party/raid roster changes
 
 -- Event handler
 HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
@@ -903,6 +1061,27 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
                 SaveCharacterData()
             end
         end
+    elseif event == 'GROUP_JOINED' then
+        -- Initialize group tracking when first joining a group
+        previousGroupMembers = GetCurrentGroupMembers()
+        previousGroupCount = GetNumGroupMembers and GetNumGroupMembers() or 1
+        groupInitialized = true
+        
+        -- Only send message if in a party (not raid) and party is full (5 members)
+        local inGroup = IsInGroup and IsInGroup()
+        local inRaid = IsInRaid and IsInRaid()
+        
+        if inGroup and not inRaid then
+            local numMembers = GetNumGroupMembers and GetNumGroupMembers() or 1
+            
+            -- Only send Hardcore Deathrace warning message when party is full (5 members)
+            if numMembers == 5 then
+                SendDeathraceMessageNow()
+            end
+        end
+    elseif event == 'GROUP_ROSTER_UPDATE' then
+        -- Send Hardcore Deathrace warning message when group roster updates (someone joins/leaves)
+        SendGroupDeathraceMessage()
     end
 end)
 
