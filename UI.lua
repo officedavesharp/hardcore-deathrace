@@ -218,19 +218,9 @@ function CreateStatisticsPanel()
     timeRemainingValue:SetText('') -- Blank until data loads
     statsFrame.timeRemainingValue = timeRemainingValue
     
-    -- Score row is hidden from tracker (shown on failure screen only)
-    -- Create hidden elements to maintain compatibility with UpdateStatisticsPanel
-    local totalTimeLabel = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    totalTimeLabel:Hide() -- Hidden - score shown on failure screen only
-    statsFrame.totalTimeLabel = totalTimeLabel
-    
-    local totalTimeValue = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontHighlight')
-    totalTimeValue:Hide() -- Hidden - score shown on failure screen only
-    statsFrame.totalTimeValue = totalTimeValue
-    
     -- Status indicator (Resting/Paused)
     local statusLabel = statsFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    -- Position relative to Failure row instead of Score row (since Score is hidden)
+    -- Position relative to Failure row (will be repositioned when failed)
     statusLabel:SetPoint('TOP', timeRemainingValue, 'BOTTOM', 0, -4)
     -- Increased left padding from 10px to 14px to match other elements
     statusLabel:SetPoint('LEFT', statsFrame, 'LEFT', 14, 0)
@@ -264,11 +254,16 @@ function UpdateStatisticsPanel()
         statsFrame.levelValue:SetText(tostring(currentLevel))
     end
     
-    -- Update darkness falls timer
+    -- Update darkness falls timer and visibility
     if hasFailed or hasWon then
-        -- Hide or show empty when failed/won
-        statsFrame.darknessValue:SetText('')
+        -- Hide darkness falls row when failed/won
+        statsFrame.darknessLabel:Hide()
+        statsFrame.darknessValue:Hide()
     else
+        -- Show darkness falls row when not failed/won
+        statsFrame.darknessLabel:Show()
+        statsFrame.darknessValue:Show()
+        
         local timeUntilDarkness = HardcoreDeathrace.GetTimeUntilNextDarkness()
         local isOnFlightPath = HardcoreDeathrace.IsOnFlightPath()
         
@@ -316,14 +311,54 @@ function UpdateStatisticsPanel()
     end
     
     -- Update time remaining with color coding (in /played format)
-    -- If won, show "WON" in green, if failed show "FAILED" in red
+    -- If won, show "Score:" label and total time in green (compact UI like failure)
+    -- If failed, show total time in red (compact UI)
     if hasWon then
-        statsFrame.timeRemainingValue:SetText('|cFF00FF00WON|r')
+        -- When won: show "Score:" label and total time played in green, use compact UI
+        local totalTimeFormatted = HardcoreDeathrace.FormatPlayedTime(totalTimePlayed)
+        statsFrame.timeRemainingLabel:SetText('Score:')
+        statsFrame.timeRemainingValue:SetText('|cFF00FF00' .. totalTimeFormatted .. '|r')
         statsFrame.timeRemainingValue:SetTextColor(0, 1, 0)
+        
+        -- Reduce frame height since Darkness Falls row is removed (20px reduction)
+        -- Original height: 112, reduced height: 92
+        statsFrame:SetHeight(92)
+        
+        -- Move Score row up to -62 (where Darkness Falls was)
+        statsFrame.timeRemainingLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 14, -62)
+        
+        -- Reposition Status row below Score row
+        statsFrame.statusLabel:SetPoint('TOP', statsFrame.timeRemainingValue, 'BOTTOM', 0, -4)
     elseif hasFailed then
-        statsFrame.timeRemainingValue:SetText('|cFFFF0000FAILED|r')
+        -- When failed: show total time played in red, move Failure row up (to where Darkness Falls was)
+        local totalTimeFormatted = HardcoreDeathrace.FormatPlayedTime(totalTimePlayed)
+        statsFrame.timeRemainingLabel:SetText('Failure:')
+        statsFrame.timeRemainingValue:SetText('|cFFFF0000' .. totalTimeFormatted .. '|r')
         statsFrame.timeRemainingValue:SetTextColor(1, 0, 0)
+        
+        -- Reduce frame height since Darkness Falls row is removed (20px reduction)
+        -- Original height: 112, reduced height: 92
+        statsFrame:SetHeight(92)
+        
+        -- Move Failure row up to -62 (where Darkness Falls was)
+        statsFrame.timeRemainingLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 14, -62)
+        
+        -- Reposition Status row below Failure row
+        statsFrame.statusLabel:SetPoint('TOP', statsFrame.timeRemainingValue, 'BOTTOM', 0, -4)
     else
+        -- When not failed/won: restore normal positions and frame height
+        -- Restore frame height to original (112)
+        statsFrame:SetHeight(112)
+        
+        -- Restore label text to "Failure:"
+        statsFrame.timeRemainingLabel:SetText('Failure:')
+        
+        -- Restore Failure row to original position (-82)
+        statsFrame.timeRemainingLabel:SetPoint('TOPLEFT', statsFrame, 'TOPLEFT', 14, -82)
+        
+        -- Restore Status row position (below Failure row)
+        statsFrame.statusLabel:SetPoint('TOP', statsFrame.timeRemainingValue, 'BOTTOM', 0, -4)
+        
         local timeRemainingFormatted = HardcoreDeathrace.FormatPlayedTime(timeRemaining)
         -- Use original time allocation (base + rolled-over, excluding bonuses) for percentage calculation
         -- This matches the darkness calculation so colors sync with darkness levels
@@ -353,9 +388,6 @@ function UpdateStatisticsPanel()
         
         statsFrame.timeRemainingValue:SetText(timeRemainingFormatted)
     end
-    
-    -- Update total time played (score) in /played format
-    statsFrame.totalTimeValue:SetText(HardcoreDeathrace.FormatPlayedTime(totalTimePlayed))
     
     -- Update status (flight path pause is indicated by cyan timer color, no text needed)
     if hasFailed then

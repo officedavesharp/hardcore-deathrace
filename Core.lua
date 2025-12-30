@@ -476,20 +476,24 @@ function ShowTunnelVision(blurIntensity, fadeIn)
     local frameName = 'HardcoreDeathraceTunnelVision_' .. blurIntensity
     
     -- Check if frame already exists and is visible
+    -- For stacking overlays, we want to keep existing overlays visible
     if HardcoreDeathrace.tunnelVisionFrames[frameName] and HardcoreDeathrace.tunnelVisionFrames[frameName]:IsShown() then
         local existingFrame = HardcoreDeathrace.tunnelVisionFrames[frameName]
         local currentAlpha = existingFrame:GetAlpha() or 0
-        -- If it's mid-fade-out, cancel fade-out and fade back in
+        -- If it's mid-fade-out, cancel fade-out and ensure it's fully visible
         if currentAlpha < 1 then
             if UIFrameFadeRemoveFrame then
                 UIFrameFadeRemoveFrame(existingFrame)
             end
             if fadeIn then
+                -- Fade back in smoothly
                 UIFrameFadeIn(existingFrame, 0.2, currentAlpha, 1)
             else
+                -- Show instantly
                 existingFrame:SetAlpha(1)
             end
         end
+        -- Frame already exists and is visible - no need to recreate or restart fade
         return
     end
     
@@ -498,6 +502,8 @@ function ShowTunnelVision(blurIntensity, fadeIn)
         local tunnelVisionFrame = CreateFrame('Frame', frameName, UIParent)
         tunnelVisionFrame:SetAllPoints(UIParent)
         tunnelVisionFrame:SetFrameStrata('FULLSCREEN_DIALOG')
+        -- Frame levels stack: level 1 = 1001, level 2 = 1002, etc.
+        -- Higher levels appear on top for proper stacking
         -- Use higher frame level for tunnel_vision_5 (complete failure)
         local frameLevel = blurIntensity > 4 and 2000 or (1000 + blurIntensity)
         tunnelVisionFrame:SetFrameLevel(frameLevel)
@@ -520,16 +526,22 @@ function ShowTunnelVision(blurIntensity, fadeIn)
         frame.texture:SetTexture(texturePath)
     end
     
+    -- Set initial alpha based on fade mode
+    -- For seamless transitions, new frame starts at alpha 0 and fades in
+    if fadeIn then
+        frame:SetAlpha(0)
+    else
+        frame:SetAlpha(1)
+    end
+    
+    -- Show the frame first (ensures it's ready and visible, even at alpha 0)
+    -- This is critical for seamless transitions - frame must be shown before fade starts
     frame:Show()
     
+    -- Start fade in immediately (no delay) to ensure seamless cross-fade with old overlay
     if fadeIn then
-        -- Smooth fade in
-        frame:SetAlpha(0)
         local fadeDuration = 0.5
         UIFrameFadeIn(frame, fadeDuration, 0, 1)
-    else
-        -- Show instantly
-        frame:SetAlpha(1)
     end
 end
 
@@ -570,7 +582,8 @@ function RemoveTunnelVision()
 end
 
 -- Update darkness overlay based on current time remaining
--- Textures replace each other sequentially (1 -> 2 -> 3 -> 4), not stack
+-- Overlays stack on top of each other (level 2 includes level 1, level 3 includes 1+2, etc.)
+-- This creates smooth transitions by adding/removing layers rather than replacing them
 -- instant: true to show instantly (on login/reload), false to fade in (timer updates)
 local function UpdateDarkness(instant)
     if hasFailed then
@@ -581,30 +594,30 @@ local function UpdateDarkness(instant)
     
     local darknessLevel = GetDarknessLevel()
     
-    -- If darkness level changed, replace the texture with smooth cross-fade
+    -- If darkness level changed, update overlays to stack properly
     if darknessLevel ~= previousDarknessLevel then
-        local fadeDuration = 0.5
+        -- Stack overlays: show all levels up to current darkness level
+        -- Level 0: no overlays (all removed)
+        -- Level 1: show overlay 1
+        -- Level 2: show overlays 1 + 2 (stacked)
+        -- Level 3: show overlays 1 + 2 + 3 (stacked)
+        -- Level 4: show overlays 1 + 2 + 3 + 4 (stacked)
         
-        -- If we have a previous overlay, fade it out while fading in the new one
-        if previousDarknessLevel > 0 then
-            local oldFrameName = 'HardcoreDeathraceTunnelVision_' .. previousDarknessLevel
-            if HardcoreDeathrace.tunnelVisionFrames[oldFrameName] then
-                local oldFrame = HardcoreDeathrace.tunnelVisionFrames[oldFrameName]
-                if oldFrame and oldFrame:IsShown() and oldFrame:GetAlpha() > 0 then
-                    -- Fade out the old overlay
-                    UIFrameFadeOut(oldFrame, fadeDuration, oldFrame:GetAlpha(), 0)
-                    C_Timer.After(fadeDuration + 0.1, function()
-                        if oldFrame:GetAlpha() == 0 then
-                            oldFrame:Hide()
-                        end
-                    end)
+        if darknessLevel == 0 then
+            -- No darkness - remove all overlays
+            RemoveTunnelVision()
+        else
+            -- Show all overlays up to current darkness level
+            for level = 1, darknessLevel do
+                ShowTunnelVision(level, not instant)
+            end
+            
+            -- Hide overlays above current darkness level (if going down)
+            if previousDarknessLevel > darknessLevel then
+                for level = darknessLevel + 1, previousDarknessLevel do
+                    RemoveSpecificTunnelVision(level)
                 end
             end
-        end
-        
-        -- Show the new overlay (fade in if not instant)
-        if darknessLevel > 0 then
-            ShowTunnelVision(darknessLevel, not instant)
         end
         
         -- Update previous darkness level for next comparison
@@ -1385,5 +1398,6 @@ HardcoreDeathrace.GetTimeForLevel = function(level) return TIME_PER_LEVEL[level]
 HardcoreDeathrace.GetOriginalTimeAllocation = function() return originalTimeAllocationThisLevel end
 HardcoreDeathrace.GetDarknessLevel = GetDarknessLevel
 HardcoreDeathrace.GetTimeUntilNextDarkness = GetTimeUntilNextDarkness
+
 
 
