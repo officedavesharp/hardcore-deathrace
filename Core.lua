@@ -98,6 +98,7 @@ local hasWon = false              -- Whether the deathrace has been won (reached
 local failureLevel = 1            -- Level at which the player failed
 local previousDarknessLevel = 0   -- Track previous darkness level for proper overlay management
 local trackedTotalXP = 0          -- Total XP tracked while addon is active (anti-cheat)
+local professionBonusLevels = {}  -- Track profession skill levels that have already granted bonus time (prevents re-gaining bonus after unlearning/relearning)
 
 -- Tunnel vision frames storage (similar to UltraHardcore)
 HardcoreDeathrace.tunnelVisionFrames = {}
@@ -181,7 +182,8 @@ local function InitializeCharacterData()
                 hasFailed = true,
                 hasWon = false,
                 failureLevel = playerLevel,
-                trackedTotalXP = 0
+                trackedTotalXP = 0,
+                professionBonusLevels = {}  -- Initialize empty profession bonus tracking
             }
         else
             -- First-time load at level 1 - start normally
@@ -193,7 +195,8 @@ local function InitializeCharacterData()
                 hasFailed = false,
                 hasWon = false,
                 failureLevel = 1,
-                trackedTotalXP = 0
+                trackedTotalXP = 0,
+                professionBonusLevels = {}  -- Initialize empty profession bonus tracking
             }
         end
     end
@@ -208,6 +211,7 @@ local function InitializeCharacterData()
     hasWon = charData.hasWon or false
     failureLevel = charData.failureLevel or currentLevel
     trackedTotalXP = charData.trackedTotalXP or 0
+    professionBonusLevels = charData.professionBonusLevels or {}  -- Load tracked profession bonus levels
     timeAtLastUpdate = time()
     
     -- Load max time remaining (for darkness calculation with bonuses)
@@ -290,7 +294,8 @@ local function SaveCharacterData()
         hasFailed = hasFailed,
         hasWon = hasWon,
         failureLevel = failureLevel,
-        trackedTotalXP = trackedTotalXP
+        trackedTotalXP = trackedTotalXP,
+        professionBonusLevels = professionBonusLevels  -- Save tracked profession bonus levels
     }
 end
 
@@ -1327,18 +1332,35 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
             
             -- Only add time if it's a profession skill increase (not weapon/defense)
             if isProfession and skillLevel then
-                -- Profession skill leveled up - add 20 seconds to failure timer
-                timeRemainingThisLevel = timeRemainingThisLevel + 20
-                -- Update max time remaining to include bonus time
-                if timeRemainingThisLevel > maxTimeRemainingThisLevel then
-                    maxTimeRemainingThisLevel = timeRemainingThisLevel
+                -- Normalize profession name for consistent tracking (case-insensitive)
+                local normalizedProfessionName = skillName:lower()
+                skillLevel = tonumber(skillLevel)
+                
+                -- Initialize profession table if it doesn't exist
+                if not professionBonusLevels[normalizedProfessionName] then
+                    professionBonusLevels[normalizedProfessionName] = {}
                 end
                 
-                -- Update UI to reflect the bonus time
-                UpdateStatisticsPanel()
-                
-                -- Save the updated time
-                SaveCharacterData()
+                -- Check if we've already granted bonus time for this profession at this skill level
+                -- This prevents re-gaining bonus time if a profession is unlearned and relearned
+                if not professionBonusLevels[normalizedProfessionName][skillLevel] then
+                    -- Mark this profession skill level as having granted bonus time
+                    professionBonusLevels[normalizedProfessionName][skillLevel] = true
+                    
+                    -- Profession skill leveled up - add 20 seconds to failure timer
+                    timeRemainingThisLevel = timeRemainingThisLevel + 20
+                    -- Update max time remaining to include bonus time
+                    if timeRemainingThisLevel > maxTimeRemainingThisLevel then
+                        maxTimeRemainingThisLevel = timeRemainingThisLevel
+                    end
+                    
+                    -- Update UI to reflect the bonus time
+                    UpdateStatisticsPanel()
+                    
+                    -- Save the updated time and profession bonus tracking
+                    SaveCharacterData()
+                end
+                -- If bonus was already granted for this profession/skill level combination, do nothing
             end
         end
     elseif event == 'PLAYER_CONTROL_GAINED' then
