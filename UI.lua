@@ -524,4 +524,98 @@ function ShowWinScreen()
     -- Keep statistics panel visible but stopped (times won't update)
 end
 
+-- Show floating bonus time indicator
+-- Displays a green text that floats upward from the stats frame
+-- text: The text to display (e.g., "+20 sec" or "+30 min")
+-- Make function globally accessible
+function ShowBonusTimeFloat(text)
+    if not statsFrame then
+        return
+    end
+    
+    -- Get font scale for consistent sizing
+    local fontScale = GetFontScale()
+    
+    -- Create floating text frame
+    local floatFrame = CreateFrame('Frame', nil, UIParent)
+    floatFrame:SetFrameStrata('FULLSCREEN_DIALOG')
+    floatFrame:SetFrameLevel(2100) -- Above stats frame (2000)
+    floatFrame:SetSize(200, 50) -- Set size to ensure frame is visible
+    
+    -- Create font string for the floating text
+    local floatText = floatFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+    floatText:SetFont('Fonts\\FRIZQT__.TTF', 18 * fontScale, 'OUTLINE')
+    floatText:SetTextColor(0, 1, 0, 1) -- Green color
+    floatText:SetText(text)
+    floatText:SetPoint('CENTER', floatFrame, 'CENTER', 0, 0)
+    floatFrame.text = floatText
+    
+    -- Position horizontally centered in frame, vertically at failure time text
+    -- Start animation from the vertical position of the failure time display
+    if statsFrame.timeRemainingValue then
+        -- Calculate horizontal offset to center in frame
+        -- Get the center X of the statsFrame
+        local statsFrameCenterX = statsFrame:GetLeft() + (statsFrame:GetWidth() / 2)
+        -- Get the center X of the timeRemainingValue
+        local timeValueCenterX = statsFrame.timeRemainingValue:GetLeft() + (statsFrame.timeRemainingValue:GetWidth() / 2)
+        -- Calculate offset needed to center horizontally
+        local horizontalOffset = statsFrameCenterX - timeValueCenterX
+        
+        -- Anchor to center of failure time value, then offset horizontally to center of frame
+        floatFrame:SetPoint('CENTER', statsFrame.timeRemainingValue, 'CENTER', horizontalOffset, 0)
+    else
+        -- Fallback to center-top if timeRemainingValue doesn't exist
+        floatFrame:SetPoint('CENTER', statsFrame, 'TOP', 0, 10)
+    end
+    
+    -- Show the frame
+    floatFrame:Show()
+    
+    -- Animation variables (stored on frame to persist across updates)
+    floatFrame.startY = 0  -- Start at the failure time line Y position
+    floatFrame.endY = 40    -- Float upward from there
+    floatFrame.duration = 1.0 -- 1 second animation
+    floatFrame.elapsed = 0
+    floatFrame.startAlpha = 1.0
+    floatFrame.endAlpha = 0.0
+    
+    -- Animate the floating text
+    floatFrame:SetScript('OnUpdate', function(self, delta)
+        self.elapsed = self.elapsed + delta
+        
+        if self.elapsed >= self.duration then
+            -- Animation complete, hide and remove frame
+            self:Hide()
+            self:SetScript('OnUpdate', nil)
+            return
+        end
+        
+        -- Calculate progress (0 to 1)
+        local progress = self.elapsed / self.duration
+        
+        -- Interpolate Y position (float upward)
+        local currentY = self.startY + (self.endY - self.startY) * progress
+        self:ClearAllPoints()
+        -- Keep horizontally centered in frame, but offset upward from failure time position
+        if statsFrame.timeRemainingValue then
+            -- Calculate horizontal offset to center in frame (recalculate in case frame moved)
+            local statsFrameCenterX = statsFrame:GetLeft() + (statsFrame:GetWidth() / 2)
+            local timeValueCenterX = statsFrame.timeRemainingValue:GetLeft() + (statsFrame.timeRemainingValue:GetWidth() / 2)
+            local horizontalOffset = statsFrameCenterX - timeValueCenterX
+            
+            self:SetPoint('CENTER', statsFrame.timeRemainingValue, 'CENTER', horizontalOffset, currentY)
+        else
+            -- Fallback positioning
+            self:SetPoint('CENTER', statsFrame, 'TOP', 0, currentY)
+        end
+        
+        -- Interpolate alpha (fade out)
+        local currentAlpha = self.startAlpha + (self.endAlpha - self.startAlpha) * progress
+        floatText:SetTextColor(0, 1, 0, currentAlpha)
+    end)
+end
+
+-- Make function globally accessible
+_G.ShowBonusTimeFloat = ShowBonusTimeFloat
+
 

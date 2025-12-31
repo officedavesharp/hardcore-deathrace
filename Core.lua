@@ -819,6 +819,22 @@ local function OnLevelUp(newLevel)
     -- Initialize max time remaining (will be updated when bonuses are added)
     maxTimeRemainingThisLevel = timeRemainingThisLevel
     
+    -- Show floating bonus time indicator for the new level time allocation
+    if _G.ShowBonusTimeFloat then
+        -- Format the new level time allocation for display
+        local hours = math.floor(newLevelTime / 3600)
+        local minutes = math.floor((newLevelTime % 3600) / 60)
+        local bonusText
+        if hours > 0 then
+            bonusText = string.format("+%d hour%s", hours, hours == 1 and "" or "s")
+        elseif minutes > 0 then
+            bonusText = string.format("+%d min%s", minutes, minutes == 1 and "" or "s")
+        else
+            bonusText = string.format("+%d sec%s", newLevelTime, newLevelTime == 1 and "" or "s")
+        end
+        _G.ShowBonusTimeFloat(bonusText)
+    end
+    
     -- Remove darkness on level up
     RemoveTunnelVision()
     previousDarknessLevel = 0
@@ -1126,6 +1142,11 @@ local function SetupAchievementIntegration()
                 -- Update max time remaining to include bonus time
                 if timeRemainingThisLevel > maxTimeRemainingThisLevel then
                     maxTimeRemainingThisLevel = timeRemainingThisLevel
+                end
+                
+                -- Show floating bonus time indicator
+                if _G.ShowBonusTimeFloat then
+                    _G.ShowBonusTimeFloat("+30 min")
                 end
                 
                 -- Update UI to reflect the bonus time
@@ -1451,6 +1472,11 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
                     -- Update max time remaining to include bonus time
                     if timeRemainingThisLevel > maxTimeRemainingThisLevel then
                         maxTimeRemainingThisLevel = timeRemainingThisLevel
+                    end
+                    
+                    -- Show floating bonus time indicator
+                    if _G.ShowBonusTimeFloat then
+                        _G.ShowBonusTimeFloat("+20 sec")
                     end
                     
                     -- Update UI to reflect the bonus time
