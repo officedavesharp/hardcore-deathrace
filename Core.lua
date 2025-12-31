@@ -1327,8 +1327,8 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
             
             -- Only add time if it's a profession skill increase (not weapon/defense)
             if isProfession and skillLevel then
-                -- Profession skill leveled up - add 1 minute (60 seconds) to failure timer
-                timeRemainingThisLevel = timeRemainingThisLevel + 60
+                -- Profession skill leveled up - add 20 seconds to failure timer
+                timeRemainingThisLevel = timeRemainingThisLevel + 20
                 -- Update max time remaining to include bonus time
                 if timeRemainingThisLevel > maxTimeRemainingThisLevel then
                     maxTimeRemainingThisLevel = timeRemainingThisLevel
