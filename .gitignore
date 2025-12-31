@@ -17,3 +17,6 @@ Desktop.ini
 .vscode/
 .idea/
 
+# Build artifacts
+*.zip
+
