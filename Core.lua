@@ -1006,6 +1006,89 @@ AnnounceLevelUp = function(level)
     end
 end
 
+-- List of achievements that should NOT grant bonus time
+local IGNORED_ACHIEVEMENTS = {
+    ["This Isn't Tpp Bad..."] = true,
+    ["Roaring Twenties"] = true,
+    ["Thirty and Flirty"] = true,
+    ["Over the Hill"] = true,
+    ["Lock In"] = true,
+    ["Locked In and Dialed"] = true,
+}
+
+-- List of profession names to check for in achievement names
+local PROFESSION_NAMES = {
+    "Herbalism", "First Aid", "Alchemy", "Blacksmithing", "Enchanting", 
+    "Engineering", "Leatherworking", "Mining", "Skinning", "Tailoring", 
+    "Cooking", "Fishing"
+}
+
+-- Check if an achievement should be ignored (no bonus time granted)
+-- Returns true if the achievement should be ignored, false otherwise
+local function ShouldIgnoreAchievement(achievementName)
+    if not achievementName or achievementName == "" then
+        return false  -- If we can't determine the name, allow bonus (safer default)
+    end
+    
+    -- Check if it's in the explicit ignore list
+    if IGNORED_ACHIEVEMENTS[achievementName] then
+        return true
+    end
+    
+    -- Check if achievement name contains any profession name
+    local achievementNameLower = achievementName:lower()
+    for _, professionName in ipairs(PROFESSION_NAMES) do
+        if achievementNameLower:find(professionName:lower(), 1, true) then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- Extract achievement name from row parameter
+-- Based on HardcoreAchievements addon structure: row.Title is a font string frame
+local function GetAchievementNameFromRow(row)
+    if not row then
+        return nil
+    end
+    
+    -- Primary method: row.Title:GetText() (confirmed from HardcoreAchievements.lua line 833)
+    -- This is how HardcoreAchievements extracts the achievement title
+    if row.Title and type(row.Title.GetText) == "function" then
+        local title = row.Title:GetText()
+        if title and type(title) == "string" and title ~= "" then
+            return title
+        end
+    end
+    
+    -- Fallback patterns (in case row structure differs)
+    -- Pattern 1: row.text (if row contains a font string)
+    if row.text and type(row.text) == "string" then
+        return row.text
+    end
+    
+    -- Pattern 2: row.name
+    if row.name and type(row.name) == "string" then
+        return row.name
+    end
+    
+    -- Pattern 3: row.achievementName
+    if row.achievementName and type(row.achievementName) == "string" then
+        return row.achievementName
+    end
+    
+    -- Pattern 4: row.GetText() method (if row itself is a font string frame)
+    if type(row.GetText) == "function" then
+        local text = row:GetText()
+        if text and type(text) == "string" then
+            return text
+        end
+    end
+    
+    return nil
+end
+
 -- Integration with HardcoreAchievements addon
 -- Hook into achievement completion to add time bonus
 local function SetupAchievementIntegration()
@@ -1024,18 +1107,34 @@ local function SetupAchievementIntegration()
         
         -- Only add time if not failed/won and HardcoreAchievements is available
         if not hasFailed and not hasWon and HardcoreAchievements then
-            -- Add 1 hour (3600 seconds) to failure timer when achievement is completed
-            timeRemainingThisLevel = timeRemainingThisLevel + 3600
-            -- Update max time remaining to include bonus time
-            if timeRemainingThisLevel > maxTimeRemainingThisLevel then
-                maxTimeRemainingThisLevel = timeRemainingThisLevel
+            -- Try to extract achievement name from row parameter and additional parameters
+            local achievementName = GetAchievementNameFromRow(row)
+            
+            -- If we couldn't get name from row, try checking additional parameters
+            if not achievementName then
+                local args = {...}
+                -- Check if first additional parameter is the achievement name
+                if args[1] and type(args[1]) == "string" then
+                    achievementName = args[1]
+                end
             end
             
-            -- Update UI to reflect the bonus time
-            UpdateStatisticsPanel()
-            
-            -- Save the updated time
-            SaveCharacterData()
+            -- Check if this achievement should be ignored
+            if not ShouldIgnoreAchievement(achievementName) then
+                -- Add 30 minutes (1800 seconds) to failure timer when achievement is completed
+                timeRemainingThisLevel = timeRemainingThisLevel + 1800
+                -- Update max time remaining to include bonus time
+                if timeRemainingThisLevel > maxTimeRemainingThisLevel then
+                    maxTimeRemainingThisLevel = timeRemainingThisLevel
+                end
+                
+                -- Update UI to reflect the bonus time
+                UpdateStatisticsPanel()
+                
+                -- Save the updated time
+                SaveCharacterData()
+            end
+            -- If achievement should be ignored, do nothing (no bonus time granted)
         end
         
         return result
