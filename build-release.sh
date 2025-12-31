@@ -72,6 +72,7 @@ mkdir -p "$ZIP_ROOT"
 # - .gitignore
 # - build-release.sh (this script)
 # - Any zip files
+# - Assets folder
 rsync -av \
     --exclude='.git' \
     --exclude='.DS_Store' \
@@ -82,6 +83,8 @@ rsync -av \
     --exclude='.gitattributes' \
     --exclude='build-release.sh' \
     --exclude='*.zip' \
+    --exclude='Assets' \
+    --exclude="${ADDON_NAME}" \
     "${ADDON_DIR}/" "${ZIP_ROOT}/"
 
 # Remove any Apple system files that might have been copied
