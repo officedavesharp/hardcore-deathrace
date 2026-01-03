@@ -72,17 +72,6 @@ local TIME_PER_LEVEL = {
     [60] = 480 * 60,
 }
 
--- XP tracking table (total XP required to reach each level)
--- Used for anti-cheat protection
-local TOTAL_XP_TABLE = {
-    [1]=400, [2]=900, [3]=1400, [4]=2100, [5]=2800, [6]=3600, [7]=4500, [8]=5400, [9]=6500, [10] = 7600,
-    [11] = 8800, [12] = 10100, [13] = 11400, [14] = 12900, [15] = 14400, [16] = 16000, [17] = 17700, [18] = 19400, [19] = 21300, [20] = 23200,
-    [21] = 25200, [22] = 27300, [23] = 29400, [24] = 31700, [25] = 34000, [26] = 36400, [27] = 38900, [28] = 41400, [29] = 44300, [30] = 47400,
-    [31] = 50800, [32] = 54500, [33] = 58600, [34] = 62800, [35] = 67100, [36] = 71600, [37] = 76100, [38] = 80800, [39] = 85700, [40] = 90700,
-    [41] = 95800, [42] = 101000, [43] = 106300, [44] = 111800, [45] = 117500, [46] = 123200, [47] = 129100, [48] = 135100, [49] = 141200, [50] = 147500,
-    [51] = 153900, [52] = 160400, [53] = 167100, [54] = 173900, [55] = 180800, [56] = 187900, [57] = 195000, [58] = 202300, [59] = 209800, [60] = 217400
-}
-
 -- Current state variables
 local currentLevel = 1
 local timeRemainingThisLevel = 0  -- Time remaining for current level (in seconds)
@@ -97,61 +86,13 @@ local hasFailed = false           -- Whether the deathrace has failed
 local hasWon = false              -- Whether the deathrace has been won (reached level 60)
 local failureLevel = 1            -- Level at which the player failed
 local previousDarknessLevel = 0   -- Track previous darkness level for proper overlay management
-local trackedTotalXP = 0          -- Total XP tracked while addon is active (anti-cheat)
 local professionBonusLevels = {}  -- Track profession skill levels that have already granted bonus time (prevents re-gaining bonus after unlearning/relearning)
 
 -- Tunnel vision frames storage (similar to UltraHardcore)
 HardcoreDeathrace.tunnelVisionFrames = {}
 
--- Calculate minimum XP required to reach a level
-local function GetMinXPForLevel(level)
-    local totalXP = 0
-    for i = 1, level - 1 do
-        if TOTAL_XP_TABLE[i] then
-            totalXP = totalXP + TOTAL_XP_TABLE[i]
-        end
-    end
-    return totalXP
-end
-
--- Calculate total XP from current level and current XP
-local function GetCurrentTotalXP()
-    local playerLevel = UnitLevel('player')
-    local currentXP = UnitXP('player')
-    return GetMinXPForLevel(playerLevel) + currentXP
-end
-
--- Check for XP cheating (if current XP > tracked XP, addon was disabled)
-local function CheckXPCheat()
-    if hasFailed or hasWon then
-        return false
-    end
-    
-    local currentTotalXP = GetCurrentTotalXP()
-    
-    -- If tracked XP is 0, initialize it (first time)
-    if trackedTotalXP == 0 then
-        trackedTotalXP = currentTotalXP
-        return false
-    end
-    
-    -- If current XP is greater than tracked XP, cheating detected
-    if currentTotalXP > trackedTotalXP then
-        hasFailed = true
-        failureLevel = UnitLevel('player')
-        -- Clear tunnel vision (no black screen for XP cheat detection)
-        RemoveTunnelVision()
-        previousDarknessLevel = 0
-        -- Don't show failure screen, just update tracker
-        SaveCharacterData()
-        UpdateStatisticsPanel()
-        return true
-    end
-    
-    -- Update tracked XP to current XP (normal progression)
-    trackedTotalXP = currentTotalXP
-    return false
-end
+-- Forward declaration for SaveCharacterData (defined later)
+local SaveCharacterData
 
 -- Initialize character data
 local function InitializeCharacterData()
@@ -171,9 +112,9 @@ local function InitializeCharacterData()
     
     -- Initialize character data if it doesn't exist
     if not HardcoreDeathraceDB[charKey] then
-        -- Check if player is loading addon for first time at level > 1
+        -- First-time load - check if player is already above level 1
         if playerLevel > 1 then
-            -- First-time load at level > 1 - mark as failed (anti-cheat)
+            -- First-time load at level > 1 - mark as failed (must start from level 1)
             HardcoreDeathraceDB[charKey] = {
                 level = playerLevel,
                 timeRemainingThisLevel = 0,
@@ -182,7 +123,6 @@ local function InitializeCharacterData()
                 hasFailed = true,
                 hasWon = false,
                 failureLevel = playerLevel,
-                trackedTotalXP = 0,
                 professionBonusLevels = {}  -- Initialize empty profession bonus tracking
             }
         else
@@ -195,7 +135,6 @@ local function InitializeCharacterData()
                 hasFailed = false,
                 hasWon = false,
                 failureLevel = 1,
-                trackedTotalXP = 0,
                 professionBonusLevels = {}  -- Initialize empty profession bonus tracking
             }
         end
@@ -210,9 +149,12 @@ local function InitializeCharacterData()
     hasFailed = charData.hasFailed or false
     hasWon = charData.hasWon or false
     failureLevel = charData.failureLevel or currentLevel
-    trackedTotalXP = charData.trackedTotalXP or 0
     professionBonusLevels = charData.professionBonusLevels or {}  -- Load tracked profession bonus levels
     timeAtLastUpdate = time()
+    
+    -- Check if this is a first-time load failure (level > 1 on first load)
+    -- Detected by: failed, no time played, level > 1, and level matches current (just initialized)
+    local isFirstTimeFailure = hasFailed and totalTimePlayed == 0 and playerLevel > 1 and (charData.level == playerLevel)
     
     -- Load max time remaining (for darkness calculation with bonuses)
     -- If not saved, initialize to current time remaining
@@ -221,10 +163,6 @@ local function InitializeCharacterData()
         -- Legacy data - initialize max to current time remaining (will be updated when bonuses are added)
         maxTimeRemainingThisLevel = charData.timeRemainingThisLevel or 0
     end
-    
-    -- Check if this is a first-time load failure (level > 1 on first load)
-    -- Detected by: failed, no time played, level > 1, and level matches current (just initialized)
-    local isFirstTimeFailure = hasFailed and totalTimePlayed == 0 and playerLevel > 1 and (charData.level == playerLevel)
     
     -- If character leveled up since last save, roll over time
     if charData.level and charData.level < playerLevel then
@@ -267,19 +205,15 @@ local function InitializeCharacterData()
         currentLevel = playerLevel
     end
     
-    -- If failed on first-time load at level > 1, don't start timer and don't check XP cheat
+    -- If failed on first-time load at level > 1, don't start timer
     if isFirstTimeFailure then
         -- First-time load failure - don't start timer, just show FAILED in tracker
         isPaused = true
-        -- Don't check XP cheat for first-time failures
-    else
-        -- Check for XP cheating on login (only if not first-time load failure)
-        CheckXPCheat()
     end
 end
 
 -- Save character data
-local function SaveCharacterData()
+SaveCharacterData = function()
     local playerName = UnitName('player')
     local realmName = GetRealmName()
     local charKey = playerName .. '-' .. realmName
@@ -294,7 +228,6 @@ local function SaveCharacterData()
         hasFailed = hasFailed,
         hasWon = hasWon,
         failureLevel = failureLevel,
-        trackedTotalXP = trackedTotalXP,
         professionBonusLevels = professionBonusLevels  -- Save tracked profession bonus levels
     }
 end
@@ -768,12 +701,6 @@ local AnnounceLevelUp
 local function OnLevelUp(newLevel)
     if hasFailed or hasWon then
         return
-    end
-    
-    -- Update tracked XP on level up (XP resets to 0, so add XP for the new level)
-    local currentTotalXP = GetCurrentTotalXP()
-    if currentTotalXP >= trackedTotalXP then
-        trackedTotalXP = currentTotalXP
     end
     
     -- Ensure we have the most up-to-date time remaining by updating timer one last time
@@ -1327,7 +1254,6 @@ HardcoreDeathrace:RegisterEvent('PLAYER_LEVEL_UP')
 HardcoreDeathrace:RegisterEvent('PLAYER_UPDATE_RESTING')
 HardcoreDeathrace:RegisterEvent('PLAYER_LOGOUT')
 HardcoreDeathrace:RegisterEvent('PLAYER_ENTERING_WORLD')
-HardcoreDeathrace:RegisterEvent('PLAYER_XP_UPDATE') -- Track XP changes for anti-cheat
 HardcoreDeathrace:RegisterEvent('CHAT_MSG_SKILL') -- Detect profession skill level ups
 HardcoreDeathrace:RegisterEvent('PLAYER_CONTROL_GAINED') -- Detect when flight path ends (player regains control)
 HardcoreDeathrace:RegisterEvent('GROUP_JOINED') -- Detect when player joins a party/raid
@@ -1403,23 +1329,8 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
         if not isPaused then
             timeAtLastUpdate = time()
         end
-        -- Check for XP cheating when entering world
-        CheckXPCheat()
         -- Update UI to reflect flight path status
         UpdateStatisticsPanel()
-    elseif event == 'PLAYER_XP_UPDATE' then
-        -- Track XP changes and check for cheating
-        if not hasFailed and not hasWon then
-            local currentTotalXP = GetCurrentTotalXP()
-            -- Update tracked XP if it's normal progression
-            if currentTotalXP >= trackedTotalXP then
-                trackedTotalXP = currentTotalXP
-                SaveCharacterData()
-            else
-                -- XP went down (shouldn't happen normally, but check anyway)
-                CheckXPCheat()
-            end
-        end
     elseif event == 'CHAT_MSG_SKILL' then
         -- Detect profession skill level ups (only actual professions, not weapon/defense skills)
         if not hasFailed and not hasWon then
