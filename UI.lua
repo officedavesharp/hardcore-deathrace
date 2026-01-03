@@ -573,8 +573,8 @@ function ShowBonusTimeFloat(text)
     
     -- Animation variables (stored on frame to persist across updates)
     floatFrame.startY = 0  -- Start at the failure time line Y position
-    floatFrame.endY = 40    -- Float upward from there
-    floatFrame.duration = 1.0 -- 1 second animation
+    floatFrame.endY = 50    -- Float upward from there (increased from 40 for smoother animation)
+    floatFrame.duration = 2.5 -- 2.5 second animation (increased from 1.0 to make it visible longer)
     floatFrame.elapsed = 0
     floatFrame.startAlpha = 1.0
     floatFrame.endAlpha = 0.0
