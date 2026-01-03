@@ -1024,7 +1024,7 @@ end
 
 -- List of achievements that should NOT grant bonus time
 local IGNORED_ACHIEVEMENTS = {
-    ["This Isn't Tpp Bad..."] = true,
+    ["This Isn't Too Bad..."] = true,
     ["Roaring Twenties"] = true,
     ["Thirty and Flirty"] = true,
     ["Over the Hill"] = true,
