@@ -425,21 +425,40 @@ function CreateFailureScreen()
     
     -- Failure/Win message (centered) - same font as tracker title, much larger
     local failureText = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormalHuge')
-    -- Apply font scale to vertical offset (base offset: 100)
-    failureText:SetPoint('CENTER', failureFrame, 'CENTER', 0, 100 * fontScale)
+    -- Apply font scale to vertical offset (base offset: 120, moved up to make room for condensed race/class/level)
+    failureText:SetPoint('CENTER', failureFrame, 'CENTER', 0, 120 * fontScale)
     -- Apply font scale to font size (base size: 36)
     failureText:SetFont('Fonts\\MORPHEUS.TTF', 36 * fontScale, 'OUTLINE') -- Much larger font
     failureText:SetText('')
     failureFrame.failureText = failureText
     
-    -- Final score value (centered, full format)
+    -- Combined race, level, and class display (centered, below failure message)
+    -- Format: "Level 1 Gnome Warrior"
+    local characterInfoText = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+    characterInfoText:SetPoint('CENTER', failureFrame, 'CENTER', 0, 70 * fontScale)
+    -- Apply font scale to font size (base size: 16)
+    characterInfoText:SetFont('Fonts\\FRIZQT__.TTF', 16 * fontScale)
+    characterInfoText:SetText('')
+    characterInfoText:SetTextColor(1, 1, 1) -- White color
+    failureFrame.characterInfoText = characterInfoText
+    
+    -- Final score value (centered, full format, below character info)
     local scoreValue = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormalHuge')
-    scoreValue:SetPoint('CENTER', failureFrame, 'CENTER', 0, 0)
+    scoreValue:SetPoint('CENTER', failureFrame, 'CENTER', 0, 30 * fontScale)
     -- Apply font scale to font size (base size: 20)
     scoreValue:SetFont('Fonts\\FRIZQT__.TTF', 20 * fontScale)
     scoreValue:SetText('')
     scoreValue:SetTextColor(1, 1, 1) -- White color
     failureFrame.scoreValue = scoreValue
+    
+    -- Previous high score comparison (centered, below score)
+    local previousHighScoreText = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+    previousHighScoreText:SetPoint('CENTER', failureFrame, 'CENTER', 0, -40 * fontScale)
+    -- Apply font scale to font size (base size: 16)
+    previousHighScoreText:SetFont('Fonts\\FRIZQT__.TTF', 16 * fontScale)
+    previousHighScoreText:SetText('')
+    previousHighScoreText:SetTextColor(1, 1, 1) -- Default white, will change based on comparison
+    failureFrame.previousHighScoreText = previousHighScoreText
     
     -- Function to handle continue action (define before using)
     local function ContinuePlaying()
@@ -458,8 +477,8 @@ function CreateFailureScreen()
     
     -- Continue playing text - clickable
     local continueTextFrame = CreateFrame('Frame', nil, failureFrame)
-    -- Apply font scale to vertical offset (base offset: -80)
-    continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -80 * fontScale)
+    -- Apply font scale to vertical offset (base offset: -100, moved down to make room for high score comparison)
+    continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -100 * fontScale)
     -- Apply font scale to frame size (base size: 300x30)
     continueTextFrame:SetSize(300 * fontScale, 30 * fontScale)
     continueTextFrame:EnableMouse(true)
@@ -486,6 +505,7 @@ function CreateFailureScreen()
     end)
     
     failureFrame.continueText = continueTextFrame
+    failureFrame.continueTextFrame = continueTextFrame -- Store reference for dynamic positioning
 end
 
 -- Show failure screen
@@ -493,13 +513,67 @@ function ShowFailureScreen()
     -- Always recreate to ensure fresh frame with latest code
     CreateFailureScreen()
     
+    -- Get font scale for positioning (needed for dynamic button positioning)
+    local fontScale = GetFontScale()
+    
+    -- Get player information
+    -- UnitClass and UnitRace return localized name as first value, file name as second
+    local playerClass, _ = UnitClass('player')
+    local playerRace, _ = UnitRace('player')
+    local failureLevel = HardcoreDeathrace.GetFailureLevel()
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
-    -- Show full format (days, hours, mins, secs)
-    failureFrame.scoreValue:SetText(HardcoreDeathrace.FormatPlayedTimeFull(totalTimePlayed))
     
     -- Set failure message
     failureFrame.failureText:SetText('|cFFFF0000DEATHRACE FAILED|r')
     failureFrame.failureText:SetTextColor(1, 0, 0)
+    
+    -- Display race, level, and class in condensed format: "Level 1 Gnome Warrior"
+    local characterInfo = "Level " .. tostring(failureLevel)
+    if playerRace then
+        characterInfo = characterInfo .. " " .. playerRace
+    end
+    if playerClass then
+        characterInfo = characterInfo .. " " .. playerClass
+    end
+    failureFrame.characterInfoText:SetText(characterInfo)
+    
+    -- Show full format score (days, hours, mins, secs)
+    failureFrame.scoreValue:SetText('Score: ' .. HardcoreDeathrace.FormatPlayedTimeFull(totalTimePlayed))
+    
+    -- Get and display previous high score comparison
+    local previousHighScore = HardcoreDeathrace.GetAccountHighScore()
+    if previousHighScore and previousHighScore > 0 then
+        -- Show the previous high score comparison
+        failureFrame.previousHighScoreText:Show()
+        
+        -- Calculate time difference (positive = better, negative = worse)
+        local timeDifference = totalTimePlayed - previousHighScore
+        
+        if timeDifference > 0 then
+            -- New high score! Show in green
+            local diffFormatted = HardcoreDeathrace.FormatPlayedTimeFull(timeDifference)
+            failureFrame.previousHighScoreText:SetText('Previous Best: ' .. HardcoreDeathrace.FormatPlayedTimeFull(previousHighScore) .. ' |cFF00FF00(+' .. diffFormatted .. ')|r')
+            failureFrame.previousHighScoreText:SetTextColor(1, 1, 1) -- White base color
+        elseif timeDifference < 0 then
+            -- Worse than previous best, show in red
+            local diffFormatted = HardcoreDeathrace.FormatPlayedTimeFull(math.abs(timeDifference))
+            failureFrame.previousHighScoreText:SetText('Previous Best: ' .. HardcoreDeathrace.FormatPlayedTimeFull(previousHighScore) .. ' |cFFFF0000(-' .. diffFormatted .. ')|r')
+            failureFrame.previousHighScoreText:SetTextColor(1, 1, 1) -- White base color
+        else
+            -- Exactly the same (unlikely but handle it)
+            failureFrame.previousHighScoreText:SetText('Previous Best: ' .. HardcoreDeathrace.FormatPlayedTimeFull(previousHighScore) .. ' (Tied)')
+            failureFrame.previousHighScoreText:SetTextColor(1, 1, 1) -- White color
+        end
+        
+        -- Position continue button below previous high score (with spacing)
+        failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -100 * fontScale)
+    else
+        -- No previous high score - hide the line instead of showing "None"
+        failureFrame.previousHighScoreText:Hide()
+        
+        -- Position continue button closer to score line (reduced spacing)
+        failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -60 * fontScale)
+    end
     
     failureFrame:Show()
     

@@ -94,6 +94,39 @@ HardcoreDeathrace.tunnelVisionFrames = {}
 -- Forward declaration for SaveCharacterData (defined later)
 local SaveCharacterData
 
+-- Account-wide high score tracking
+-- Initialize account-wide high scores database (ensure it exists)
+local function EnsureAccountHighScoresInitialized()
+    if not HardcoreDeathraceDB.accountHighScores then
+        HardcoreDeathraceDB.accountHighScores = {}
+    end
+end
+
+-- Get account-wide high score (best time survived)
+-- Returns: highScore (in seconds) or nil if no high score exists
+local function GetAccountHighScore()
+    -- Ensure accountHighScores is initialized before accessing it
+    EnsureAccountHighScoresInitialized()
+    local highScore = HardcoreDeathraceDB.accountHighScores.bestTime
+    return highScore
+end
+
+-- Save account-wide high score if current run is better
+-- Returns: true if new high score was set, false otherwise
+local function SaveAccountHighScore(totalTimePlayed)
+    -- Ensure accountHighScores is initialized before accessing it
+    EnsureAccountHighScoresInitialized()
+    local currentHighScore = GetAccountHighScore()
+    
+    -- If no high score exists, or current run is better (longer time), save it
+    if not currentHighScore or totalTimePlayed > currentHighScore then
+        HardcoreDeathraceDB.accountHighScores.bestTime = totalTimePlayed
+        return true
+    end
+    
+    return false
+end
+
 -- Initialize character data
 local function InitializeCharacterData()
     local playerName = UnitName('player')
@@ -604,6 +637,9 @@ local function OnPlayerDeath()
     -- Save character data
     SaveCharacterData()
     
+    -- Save account-wide high score if this run is better
+    SaveAccountHighScore(totalTimePlayed)
+    
     -- Announce failure
     AnnounceFailure()
     
@@ -665,6 +701,8 @@ local function UpdateTimer()
             hasFailed = true
             failureLevel = currentLevel -- Save the level at which they failed
             SaveCharacterData()
+            -- Save account-wide high score if this run is better
+            SaveAccountHighScore(totalTimePlayed)
             -- Announce failure
             AnnounceFailure()
             -- Show tunnel_vision_5.png (all black) when timer runs out
@@ -1273,6 +1311,8 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
             end)
         end
     elseif event == 'PLAYER_LOGIN' then
+        -- Ensure account-wide high scores are initialized
+        EnsureAccountHighScoresInitialized()
         InitializeCharacterData()
         -- Check if player is resting on login
         isResting = IsResting()
@@ -1456,6 +1496,40 @@ HardcoreDeathrace.GetTimeForLevel = function(level) return TIME_PER_LEVEL[level]
 HardcoreDeathrace.GetOriginalTimeAllocation = function() return originalTimeAllocationThisLevel end
 HardcoreDeathrace.GetDarknessLevel = GetDarknessLevel
 HardcoreDeathrace.GetTimeUntilNextDarkness = GetTimeUntilNextDarkness
+HardcoreDeathrace.GetAccountHighScore = GetAccountHighScore
+
+-- Slash command handler for /dr fail
+-- Opens the failure screen if the race has failed
+local function HandleSlashCommand(msg)
+    -- Trim whitespace and convert to lowercase for comparison
+    local command = string.lower(string.gsub(msg, "^%s*(.-)%s*$", "%1"))
+    
+    if command == "fail" then
+        -- Check if the race has failed
+        if hasFailed then
+            -- Show the failure screen (function is defined in UI.lua)
+            if ShowFailureScreen then
+                ShowFailureScreen()
+                -- Also show the tunnel vision overlay if not already shown
+                RemoveTunnelVision()
+                ShowTunnelVision(5, false) -- Show instantly, no fade
+            else
+                ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Failure screen function not available.")
+            end
+        else
+            ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Your race has not failed yet.")
+        end
+    else
+        -- Unknown command - show help
+        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Available commands:")
+        ChatFrame1:AddMessage("  |cFFFFFF00/dr fail|r - Show failure screen (if race has failed)")
+    end
+end
+
+-- Register slash commands
+SLASH_HARDCOREDEATHRACE1 = "/dr"
+SLASH_HARDCOREDEATHRACE2 = "/deathrace"
+SlashCmdList["HARDCOREDEATHRACE"] = HandleSlashCommand
 
 
 
