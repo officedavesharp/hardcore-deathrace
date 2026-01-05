@@ -445,46 +445,14 @@ function CreateFailureScreen()
     scoreValue:SetTextColor(1, 1, 1) -- White color
     failureFrame.scoreValue = scoreValue
     
-    -- Previous high score comparison (centered, directly below score with minimal gap)
+    -- Previous high score comparison (centered, below score)
     local previousHighScoreText = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    previousHighScoreText:SetPoint('TOP', scoreValue, 'BOTTOM', 0, -8 * fontScale)
+    previousHighScoreText:SetPoint('CENTER', failureFrame, 'CENTER', 0, -40 * fontScale)
     -- Apply font scale to font size (base size: 16)
     previousHighScoreText:SetFont('Fonts\\FRIZQT__.TTF', 16 * fontScale)
     previousHighScoreText:SetText('')
     previousHighScoreText:SetTextColor(1, 1, 1) -- Default white, will change based on comparison
     failureFrame.previousHighScoreText = previousHighScoreText
-    
-    -- Leaderboard rankings section (centered, below previous high score)
-    local leaderboardHeader = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    leaderboardHeader:SetPoint('TOP', previousHighScoreText, 'BOTTOM', 0, -12 * fontScale)
-    leaderboardHeader:SetFont('Fonts\\FRIZQT__.TTF', 18 * fontScale)
-    leaderboardHeader:SetText('|cFFFFFF00Leaderboard|r')
-    leaderboardHeader:SetTextColor(1, 1, 0) -- Yellow color
-    failureFrame.leaderboardHeader = leaderboardHeader
-    
-    -- Realm-wide rank
-    local realmRankText = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    realmRankText:SetPoint('TOP', leaderboardHeader, 'BOTTOM', 0, -6 * fontScale)
-    realmRankText:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
-    realmRankText:SetText('')
-    realmRankText:SetTextColor(1, 1, 1) -- White color
-    failureFrame.realmRankText = realmRankText
-    
-    -- Race rank
-    local raceRankText = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    raceRankText:SetPoint('TOP', realmRankText, 'BOTTOM', 0, -4 * fontScale)
-    raceRankText:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
-    raceRankText:SetText('')
-    raceRankText:SetTextColor(1, 1, 1) -- White color
-    failureFrame.raceRankText = raceRankText
-    
-    -- Class rank
-    local classRankText = failureFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-    classRankText:SetPoint('TOP', raceRankText, 'BOTTOM', 0, -4 * fontScale)
-    classRankText:SetFont('Fonts\\FRIZQT__.TTF', 14 * fontScale)
-    classRankText:SetText('')
-    classRankText:SetTextColor(1, 1, 1) -- White color
-    failureFrame.classRankText = classRankText
     
     -- Function to handle continue action (define before using)
     local function ContinuePlaying()
@@ -544,11 +512,6 @@ function ShowFailureScreen(previousHighScore)
     -- Always recreate to ensure fresh frame with latest code
     CreateFailureScreen()
     
-    -- Hide statistics panel (deathrace tracker) when showing failure screen
-    if statsFrame then
-        statsFrame:Hide()
-    end
-    
     -- Get font scale for positioning (needed for dynamic button positioning)
     local fontScale = GetFontScale()
     
@@ -556,7 +519,6 @@ function ShowFailureScreen(previousHighScore)
     -- UnitClass and UnitRace return localized name as first value, file name as second
     local playerClass, _ = UnitClass('player')
     local playerRace, _ = UnitRace('player')
-    local realmName = GetRealmName()
     local failureLevel = HardcoreDeathrace.GetFailureLevel()
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
     
@@ -577,65 +539,6 @@ function ShowFailureScreen(previousHighScore)
     -- Show full format score (days, hours, mins, secs)
     failureFrame.scoreValue:SetText('Score: ' .. HardcoreDeathrace.FormatPlayedTimeFull(totalTimePlayed))
     
-    -- Calculate and display leaderboard rankings
-    if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.GetPlayerRank then
-        local rankings = HardcoreDeathraceLeaderboard:GetPlayerRank(totalTimePlayed, playerRace, playerClass, realmName)
-        
-        -- Show leaderboard header
-        failureFrame.leaderboardHeader:Show()
-        
-        -- Realm-wide rank
-        if rankings.realmRank and rankings.realmTotal > 0 then
-            failureFrame.realmRankText:SetText(string.format("Realm-wide: %d", rankings.realmRank))
-            failureFrame.realmRankText:Show()
-        else
-            failureFrame.realmRankText:Hide()
-        end
-        
-        -- Race rank
-        if rankings.raceRank and rankings.raceTotal > 0 then
-            failureFrame.raceRankText:SetText(string.format("Race: %d", rankings.raceRank))
-            failureFrame.raceRankText:Show()
-        else
-            failureFrame.raceRankText:Hide()
-        end
-        
-        -- Class rank
-        if rankings.classRank and rankings.classTotal > 0 then
-            failureFrame.classRankText:SetText(string.format("Class: %d", rankings.classRank))
-            failureFrame.classRankText:Show()
-        else
-            failureFrame.classRankText:Hide()
-        end
-        
-        -- Adjust continue button position based on whether rankings are shown
-        -- Position below the lowest visible element
-        if rankings.classRank and rankings.classTotal > 0 then
-            failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame.classRankText, 'CENTER', 0, -30 * fontScale)
-        elseif rankings.raceRank and rankings.raceTotal > 0 then
-            failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame.raceRankText, 'CENTER', 0, -30 * fontScale)
-        elseif rankings.realmRank and rankings.realmTotal > 0 then
-            failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame.realmRankText, 'CENTER', 0, -30 * fontScale)
-        elseif previousHighScore and previousHighScore > 0 then
-            failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame.previousHighScoreText, 'CENTER', 0, -30 * fontScale)
-        else
-            failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame.scoreValue, 'CENTER', 0, -60 * fontScale)
-        end
-    else
-        -- Hide ranking elements if leaderboard not available
-        failureFrame.leaderboardHeader:Hide()
-        failureFrame.realmRankText:Hide()
-        failureFrame.raceRankText:Hide()
-        failureFrame.classRankText:Hide()
-        
-        -- Position continue button below previous high score
-        if previousHighScore and previousHighScore > 0 then
-            failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -100 * fontScale)
-        else
-            failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -60 * fontScale)
-        end
-    end
-    
     -- Get and display previous high score comparison
     -- Use provided previousHighScore if available, otherwise get from database
     -- This ensures we compare against the OLD high score, not the newly saved one
@@ -643,19 +546,36 @@ function ShowFailureScreen(previousHighScore)
         previousHighScore = HardcoreDeathrace.GetAccountHighScore()
     end
     if previousHighScore and previousHighScore > 0 then
-        -- Show the previous high score (no comparison)
+        -- Show the previous high score comparison
         failureFrame.previousHighScoreText:Show()
-        failureFrame.previousHighScoreText:SetText('Previous Best: ' .. HardcoreDeathrace.FormatPlayedTimeFull(previousHighScore))
-        failureFrame.previousHighScoreText:SetTextColor(1, 1, 1) -- White color
         
+        -- Calculate time difference (positive = better, negative = worse)
+        local timeDifference = totalTimePlayed - previousHighScore
+        
+        if timeDifference > 0 then
+            -- New high score! Show in green
+            local diffFormatted = HardcoreDeathrace.FormatPlayedTimeFull(timeDifference)
+            failureFrame.previousHighScoreText:SetText('Previous Best: ' .. HardcoreDeathrace.FormatPlayedTimeFull(previousHighScore) .. ' |cFF00FF00(+' .. diffFormatted .. ')|r')
+            failureFrame.previousHighScoreText:SetTextColor(1, 1, 1) -- White base color
+        elseif timeDifference < 0 then
+            -- Worse than previous best, show in red
+            local diffFormatted = HardcoreDeathrace.FormatPlayedTimeFull(math.abs(timeDifference))
+            failureFrame.previousHighScoreText:SetText('Previous Best: ' .. HardcoreDeathrace.FormatPlayedTimeFull(previousHighScore) .. ' |cFFFF0000(-' .. diffFormatted .. ')|r')
+            failureFrame.previousHighScoreText:SetTextColor(1, 1, 1) -- White base color
+        else
+            -- Exactly the same (unlikely but handle it)
+            failureFrame.previousHighScoreText:SetText('Previous Best: ' .. HardcoreDeathrace.FormatPlayedTimeFull(previousHighScore) .. ' (Tied)')
+            failureFrame.previousHighScoreText:SetTextColor(1, 1, 1) -- White color
+        end
+        
+        -- Position continue button below previous high score (with spacing)
+        failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -100 * fontScale)
     else
         -- No previous high score - hide the line instead of showing "None"
         failureFrame.previousHighScoreText:Hide()
         
-        -- Position will be adjusted by ranking section if available
-        if not (HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.GetPlayerRank) then
-            failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame.scoreValue, 'CENTER', 0, -60 * fontScale)
-        end
+        -- Position continue button closer to score line (reduced spacing)
+        failureFrame.continueTextFrame:SetPoint('CENTER', failureFrame, 'CENTER', 0, -60 * fontScale)
     end
     
     failureFrame:Show()
@@ -668,11 +588,6 @@ function ShowWinScreen()
     -- Always recreate to ensure fresh frame with latest code
     CreateFailureScreen()
     
-    -- Hide statistics panel (deathrace tracker) when showing win screen
-    if statsFrame then
-        statsFrame:Hide()
-    end
-    
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
     -- Show full format (days, hours, mins, secs)
     failureFrame.scoreValue:SetText(HardcoreDeathrace.FormatPlayedTimeFull(totalTimePlayed))
@@ -682,6 +597,8 @@ function ShowWinScreen()
     failureFrame.failureText:SetTextColor(0, 1, 0)
     
     failureFrame:Show()
+    
+    -- Keep statistics panel visible but stopped (times won't update)
 end
 
 -- Show floating bonus time indicator
