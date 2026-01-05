@@ -148,10 +148,16 @@ local function InitializeCharacterData()
     local currentXP = UnitXP('player')
     
     -- Check if this is a fresh character (level 1, 0 XP earned)
-    -- If so, wipe saved variables and start fresh
+    -- Only wipe saved variables if the character is alive
+    -- If the character is dead, preserve their existing failure record
     if playerLevel == 1 and currentXP == 0 then
-        -- Fresh character detected - wipe saved data for this character
-        HardcoreDeathraceDB[charKey] = nil
+        -- Check if player is dead before wiping
+        local isDead = UnitIsDead("player") or UnitIsDeadOrGhost("player")
+        if not isDead then
+            -- Fresh character detected and alive - wipe saved data for this character
+            HardcoreDeathraceDB[charKey] = nil
+        end
+        -- If character is dead, don't wipe - leave their existing fail in place
     end
     
     -- Initialize character data if it doesn't exist
@@ -684,6 +690,17 @@ local function OnPlayerDeath()
     -- Save account-wide high score if this run is better
     SaveAccountHighScore(totalTimePlayed)
     
+    -- Broadcast failure to leaderboard
+    if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.BuildFailureRecord then
+        local failureRecord = HardcoreDeathraceLeaderboard:BuildFailureRecord()
+        if failureRecord then
+            -- Store locally
+            HardcoreDeathraceLeaderboard:StoreRecord(failureRecord)
+            -- Broadcast to other players
+            HardcoreDeathraceLeaderboard:BroadcastRecord(failureRecord)
+        end
+    end
+    
     -- Announce failure
     AnnounceFailure()
     
@@ -750,6 +767,18 @@ local function UpdateTimer()
             local previousHighScore = GetAccountHighScore()
             -- Save account-wide high score if this run is better
             SaveAccountHighScore(totalTimePlayed)
+            
+            -- Broadcast failure to leaderboard
+            if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.BuildFailureRecord then
+                local failureRecord = HardcoreDeathraceLeaderboard:BuildFailureRecord()
+                if failureRecord then
+                    -- Store locally
+                    HardcoreDeathraceLeaderboard:StoreRecord(failureRecord)
+                    -- Broadcast to other players
+                    HardcoreDeathraceLeaderboard:BroadcastRecord(failureRecord)
+                end
+            end
+            
             -- Announce failure
             AnnounceFailure()
             -- Show tunnel_vision_5.png (all black) when timer runs out
@@ -811,6 +840,18 @@ local function OnLevelUp(newLevel)
         hasWon = true
         currentLevel = 60
         SaveCharacterData()
+        
+        -- Broadcast success to leaderboard
+        if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.BuildSuccessRecord then
+            local successRecord = HardcoreDeathraceLeaderboard:BuildSuccessRecord()
+            if successRecord then
+                -- Store locally
+                HardcoreDeathraceLeaderboard:StoreRecord(successRecord)
+                -- Broadcast to other players
+                HardcoreDeathraceLeaderboard:BroadcastRecord(successRecord)
+            end
+        end
+        
         -- Clear tunnel vision on win
         RemoveTunnelVision()
         previousDarknessLevel = 0
@@ -942,8 +983,12 @@ local function FormatPlayedTimeFull(seconds)
         table.insert(parts, string.format("%d hour%s", hours, hours == 1 and "" or "s"))
     end
     
-    -- Always show minutes and seconds
-    table.insert(parts, string.format("%d min%s", minutes, minutes == 1 and "" or "s"))
+    -- Only show minutes if greater than 0
+    if minutes > 0 then
+        table.insert(parts, string.format("%d min%s", minutes, minutes == 1 and "" or "s"))
+    end
+    
+    -- Always show seconds
     table.insert(parts, string.format("%d sec%s", secs, secs == 1 and "" or "s"))
     
     return table.concat(parts, ", ")
@@ -1385,6 +1430,10 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
         InitializeUI()
         -- Update UI immediately with loaded data
         UpdateStatisticsPanel()
+        -- Initialize leaderboard system
+        if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.Initialize then
+            HardcoreDeathraceLeaderboard:Initialize()
+        end
         -- Set up HardcoreAchievements integration if available
         C_Timer.After(2, function()
             SetupAchievementIntegration()
@@ -1589,8 +1638,8 @@ HardcoreDeathrace.ShowTunnelVision = ShowTunnelVision
 HardcoreDeathrace.RemoveSpecificTunnelVision = RemoveSpecificTunnelVision
 HardcoreDeathrace.CleanupTunnelVisionFrames = CleanupTunnelVisionFrames
 
--- Slash command handler for /dr fail
--- Opens the failure screen if the race has failed
+-- Slash command handler for /dr fail and /drlb
+-- Opens the failure screen if the race has failed, or toggles leaderboard
 local function HandleSlashCommand(msg)
     -- Trim whitespace and convert to lowercase for comparison
     local command = string.lower(string.gsub(msg, "^%s*(.-)%s*$", "%1"))
@@ -1617,10 +1666,23 @@ local function HandleSlashCommand(msg)
     end
 end
 
+-- Slash command handler for /drlb (leaderboard toggle)
+local function HandleLeaderboardCommand(msg)
+    if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.Toggle then
+        HardcoreDeathraceLeaderboard:Toggle()
+    else
+        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Leaderboard system not available.")
+    end
+end
+
 -- Register slash commands
 SLASH_HARDCOREDEATHRACE1 = "/dr"
 SLASH_HARDCOREDEATHRACE2 = "/deathrace"
 SlashCmdList["HARDCOREDEATHRACE"] = HandleSlashCommand
+
+-- Register leaderboard slash command
+SLASH_DEATHRACELEADERBOARD1 = "/drlb"
+SlashCmdList["DEATHRACELEADERBOARD"] = HandleLeaderboardCommand
 
 
 

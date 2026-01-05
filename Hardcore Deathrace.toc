@@ -7,4 +7,6 @@
 
 Core.lua
 UI.lua
+JoinDeathRaceChannel.lua
+Leaderboard.lua
 
