@@ -7,4 +7,5 @@
 
 Core.lua
 UI.lua
+Leaderboard.lua
 

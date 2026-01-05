@@ -684,6 +684,17 @@ local function OnPlayerDeath()
     -- Save account-wide high score if this run is better
     SaveAccountHighScore(totalTimePlayed)
     
+    -- Broadcast failure to leaderboard
+    if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.BuildFailureRecord then
+        local failureRecord = HardcoreDeathraceLeaderboard:BuildFailureRecord()
+        if failureRecord then
+            -- Store locally
+            HardcoreDeathraceLeaderboard:StoreFailureRecord(failureRecord)
+            -- Broadcast to other players
+            HardcoreDeathraceLeaderboard:BroadcastFailure(failureRecord)
+        end
+    end
+    
     -- Announce failure
     AnnounceFailure()
     
@@ -750,6 +761,18 @@ local function UpdateTimer()
             local previousHighScore = GetAccountHighScore()
             -- Save account-wide high score if this run is better
             SaveAccountHighScore(totalTimePlayed)
+            
+            -- Broadcast failure to leaderboard
+            if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.BuildFailureRecord then
+                local failureRecord = HardcoreDeathraceLeaderboard:BuildFailureRecord()
+                if failureRecord then
+                    -- Store locally
+                    HardcoreDeathraceLeaderboard:StoreFailureRecord(failureRecord)
+                    -- Broadcast to other players
+                    HardcoreDeathraceLeaderboard:BroadcastFailure(failureRecord)
+                end
+            end
+            
             -- Announce failure
             AnnounceFailure()
             -- Show tunnel_vision_5.png (all black) when timer runs out
@@ -1385,6 +1408,10 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
         InitializeUI()
         -- Update UI immediately with loaded data
         UpdateStatisticsPanel()
+        -- Initialize leaderboard system
+        if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.Initialize then
+            HardcoreDeathraceLeaderboard:Initialize()
+        end
         -- Set up HardcoreAchievements integration if available
         C_Timer.After(2, function()
             SetupAchievementIntegration()
@@ -1589,8 +1616,8 @@ HardcoreDeathrace.ShowTunnelVision = ShowTunnelVision
 HardcoreDeathrace.RemoveSpecificTunnelVision = RemoveSpecificTunnelVision
 HardcoreDeathrace.CleanupTunnelVisionFrames = CleanupTunnelVisionFrames
 
--- Slash command handler for /dr fail
--- Opens the failure screen if the race has failed
+-- Slash command handler for /dr fail and /drlb
+-- Opens the failure screen if the race has failed, or toggles leaderboard
 local function HandleSlashCommand(msg)
     -- Trim whitespace and convert to lowercase for comparison
     local command = string.lower(string.gsub(msg, "^%s*(.-)%s*$", "%1"))
@@ -1617,10 +1644,23 @@ local function HandleSlashCommand(msg)
     end
 end
 
+-- Slash command handler for /drlb (leaderboard toggle)
+local function HandleLeaderboardCommand(msg)
+    if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.Toggle then
+        HardcoreDeathraceLeaderboard:Toggle()
+    else
+        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Leaderboard system not available.")
+    end
+end
+
 -- Register slash commands
 SLASH_HARDCOREDEATHRACE1 = "/dr"
 SLASH_HARDCOREDEATHRACE2 = "/deathrace"
 SlashCmdList["HARDCOREDEATHRACE"] = HandleSlashCommand
+
+-- Register leaderboard slash command
+SLASH_DEATHRACELEADERBOARD1 = "/drlb"
+SlashCmdList["DEATHRACELEADERBOARD"] = HandleLeaderboardCommand
 
 
 
