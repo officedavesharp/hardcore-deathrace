@@ -187,7 +187,6 @@ function LB:BuildSuccessRecord()
 end
 
 -- Store a run record (indefinitely) - works for both failed and successful runs
--- Each run is uniquely identified by name-realm-date to allow multiple runs per character name
 function LB:StoreRecord(record)
     if not record or not record.name or not record.date then
         return false
@@ -200,62 +199,68 @@ function LB:StoreRecord(record)
     local cache = HardcoreDeathraceDB.leaderboard
     local index = HardcoreDeathraceDB.leaderboardIndex
     
-    -- Create unique key for this run: name-realm-date-score
-    -- Using date+score ensures uniqueness even if two runs happen at the same second
-    local uniqueKey = string.format("%s-%d-%d", record.name, record.date, record.score)
-    
-    -- Check if this exact run already exists (prevent duplicates)
-    if cache[uniqueKey] then
-        return false  -- Already stored
-    end
-    
-    -- Store the record with unique key (allows multiple runs per character name)
-    cache[uniqueKey] = {
-        name = record.name,
-        race = record.race or "Unknown",
-        class = record.class or "Unknown",
-        level = record.level,
-        score = record.score,
-        date = record.date,
-        version = record.version,
-        realm = record.realm,
-        selfFound = record.selfFound or false,  -- Self-found status
-    }
-    
-    -- Update index (sorted by date, newest first)
-    -- Insert new entry in sorted order (newest first)
-    local newEntry = { name = uniqueKey, date = record.date }
+    -- Check if this is a better score for this character
+    local existing = cache[record.name]
     local isNewRecord = false
-    if #index == 0 then
-        table.insert(index, newEntry)
-    else
+    
+    if not existing or record.score > (existing.score or 0) then
+        -- Store the record (only keep best score per character)
+        cache[record.name] = {
+            name = record.name,
+            race = record.race or "Unknown",
+            class = record.class or "Unknown",
+            level = record.level,
+            score = record.score,
+            date = record.date,
+            version = record.version,
+            realm = record.realm,
+            selfFound = record.selfFound or false,  -- Self-found status
+        }
+        
+        -- Update index (sorted by date, newest first)
+        -- Remove existing entry if present
         for i, entry in ipairs(index) do
-            if record.date > entry.date then
-                table.insert(index, i, newEntry)
-                isNewRecord = true
+            if entry.name == record.name then
+                table.remove(index, i)
                 break
             end
         end
-        if not isNewRecord then
-            table.insert(index, newEntry)  -- Append if oldest
+        
+        -- Insert new entry in sorted order (newest first)
+        local newEntry = { name = record.name, date = record.date }
+        if #index == 0 then
+            table.insert(index, newEntry)
+        else
+            for i, entry in ipairs(index) do
+                if record.date > entry.date then
+                    table.insert(index, i, newEntry)
+                    isNewRecord = true
+                    break
+                end
+            end
+            if not isNewRecord then
+                table.insert(index, newEntry)  -- Append if oldest
+            end
         end
+        
+        -- Update seen entry
+        LB.seen[record.name] = {
+            name = record.name,
+            race = record.race or "Unknown",
+            class = record.class or "Unknown",
+            level = record.level,
+            score = record.score,
+            date = record.date,
+            version = record.version,
+            realm = record.realm,
+            selfFound = record.selfFound or false,  -- Self-found status
+            last = GetServerTime(),
+        }
+        
+        return true
     end
     
-    -- Update seen entry (use character name as key for seen tracking)
-    LB.seen[record.name] = {
-        name = record.name,
-        race = record.race or "Unknown",
-        class = record.class or "Unknown",
-        level = record.level,
-        score = record.score,
-        date = record.date,
-        version = record.version,
-        realm = record.realm,
-        selfFound = record.selfFound or false,  -- Self-found status
-        last = GetServerTime(),
-    }
-    
-    return true
+    return false
 end
 
 -- Broadcast record to other players via DeathRace channel exclusively
