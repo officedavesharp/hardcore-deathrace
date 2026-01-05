@@ -870,10 +870,10 @@ function LB:RefreshUI()
         row.cols[3]:SetText(rowData.class or "Unknown")  -- Class
         row.cols[4]:SetText(tostring(rowData.level))  -- Level
         row.cols[5]:SetText(FormatScore(rowData.score))  -- Score (time)
-        -- Self-Found column: show checkmark (✓) if self-found, empty otherwise
+        -- Self-Found column: show "Y" if self-found, empty otherwise
         if rowData.selfFound then
-            row.cols[6]:SetText("✓")  -- Checkmark character
-            row.cols[6]:SetTextColor(0, 1, 0)  -- Green color for checkmark
+            row.cols[6]:SetText("Y")  -- "Y" indicates self-found
+            row.cols[6]:SetTextColor(0, 1, 0)  -- Green color for "Y"
         else
             row.cols[6]:SetText("")  -- Empty for non-self-found
         end
