@@ -1,4 +1,4 @@
-## Interface: 11403
+## Interface: 11508
 ## Title: Hardcore Deathrace
 ## Notes: Race to level 60 before time runs out, with your screen getting darker the slower you progress
 ## Author: VanityProjects - twitch.tv/vanityprojects
