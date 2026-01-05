@@ -625,9 +625,15 @@ function LB:CreateFrame()
     
     LB_HEADER = {}
     local x = 0
+    local NAME_COLUMN_LEFT_PADDING = 10  -- Padding for name column
     for i, col in ipairs(COLUMNS) do
         local fs = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        fs:SetPoint("LEFT", header, "LEFT", x, 0)
+        -- Add left padding for the first column (name)
+        local xPos = x
+        if i == 1 then
+            xPos = xPos + NAME_COLUMN_LEFT_PADDING
+        end
+        fs:SetPoint("LEFT", header, "LEFT", xPos, 0)
         fs:SetSize(col.width, 20)
         fs:SetJustifyH(col.align or "CENTER")
         fs:SetJustifyV("MIDDLE")
@@ -671,9 +677,15 @@ function LB:CreateFrame()
         row.cols = {}
         
         local xOffset = 0
+        local NAME_COLUMN_LEFT_PADDING = 10  -- Padding for name column
         for j, col in ipairs(COLUMNS) do
             local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            fs:SetPoint("TOPLEFT", row, "TOPLEFT", xOffset, 0)
+            -- Add left padding for the first column (name)
+            local xPos = xOffset
+            if j == 1 then
+                xPos = xPos + NAME_COLUMN_LEFT_PADDING
+            end
+            fs:SetPoint("TOPLEFT", row, "TOPLEFT", xPos, 0)
             fs:SetWidth(col.width)
             fs:SetHeight(ROW_HEIGHT)
             fs:SetJustifyH(COLUMNS[j].align or "CENTER")
@@ -764,9 +776,15 @@ function LB:RefreshUI()
             row.cols = {}
             
             local xOffset = 0
+            local NAME_COLUMN_LEFT_PADDING = 10  -- Padding for name column
             for j, col in ipairs(COLUMNS) do
                 local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                fs:SetPoint("TOPLEFT", row, "TOPLEFT", xOffset, 0)
+                -- Add left padding for the first column (name)
+                local xPos = xOffset
+                if j == 1 then
+                    xPos = xPos + NAME_COLUMN_LEFT_PADDING
+                end
+                fs:SetPoint("TOPLEFT", row, "TOPLEFT", xPos, 0)
                 fs:SetWidth(col.width)
                 fs:SetHeight(ROW_HEIGHT)
                 fs:SetJustifyH(COLUMNS[j].align or "CENTER")
