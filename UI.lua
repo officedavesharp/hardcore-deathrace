@@ -457,7 +457,10 @@ function CreateFailureScreen()
     -- Function to handle continue action (define before using)
     local function ContinuePlaying()
         -- Disable fog effect (remove tunnel_vision_5)
-        RemoveTunnelVision()
+        -- Use namespaced function to avoid conflicts with other addons
+        if HardcoreDeathrace and HardcoreDeathrace.RemoveTunnelVision then
+            HardcoreDeathrace.RemoveTunnelVision()
+        end
         -- Hide failure screen
         failureFrame:Hide()
         -- Show statistics panel with stopped times

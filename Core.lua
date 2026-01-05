@@ -1,11 +1,22 @@
 -- Hardcore Deathrace - Core Timer and Darkness Management
 -- Timer-based screen darkening addon for hardcore leveling challenge
+--
+-- IMPORTANT: This addon uses proper namespacing for all darkness/tunnel vision functions
+-- to avoid conflicts with other addons (such as Ultra Hardcore). All tunnel vision frames
+-- are prefixed with "HardcoreDeathraceTunnelVision_" and stored in HardcoreDeathrace.tunnelVisionFrames.
+-- This ensures complete isolation from other addons' darkness systems.
 
 -- Initialize addon namespace
 HardcoreDeathrace = CreateFrame('Frame')
 
 -- Saved variables database
 HardcoreDeathraceDB = HardcoreDeathraceDB or {}
+
+-- Initialize tunnel vision frames storage (properly namespaced to avoid conflicts)
+-- This table stores only frames created by this addon, ensuring no interference with other addons
+if not HardcoreDeathrace.tunnelVisionFrames then
+    HardcoreDeathrace.tunnelVisionFrames = {}
+end
 
 -- Time allocation per level (in seconds)
 -- Levels 1-5: 10 minutes, 6-10: 20 minutes, 11-15: 45 minutes, 16-20: 60 minutes, 21-30: 120 minutes, 31-40: 240 minutes, 41-50: 360 minutes, 51-60: 480 minutes
@@ -88,8 +99,8 @@ local failureLevel = 1            -- Level at which the player failed
 local previousDarknessLevel = 0   -- Track previous darkness level for proper overlay management
 local professionBonusLevels = {}  -- Track profession skill levels that have already granted bonus time (prevents re-gaining bonus after unlearning/relearning)
 
--- Tunnel vision frames storage (similar to UltraHardcore)
-HardcoreDeathrace.tunnelVisionFrames = {}
+-- Tunnel vision frames storage is initialized at the top of the file (properly namespaced to avoid conflicts)
+-- All frames created by this addon are stored in HardcoreDeathrace.tunnelVisionFrames with names prefixed "HardcoreDeathraceTunnelVision_"
 
 -- Forward declaration for SaveCharacterData (defined later)
 local SaveCharacterData
@@ -431,11 +442,16 @@ local function GetTimeUntilNextDarkness()
     return timeUntilThreshold
 end
 
--- Show tunnel vision overlay (based on UltraHardcore implementation)
+-- Show tunnel vision overlay (properly namespaced to avoid conflicts with other addons)
 -- fadeIn: true to fade in smoothly, false to show instantly
-function ShowTunnelVision(blurIntensity, fadeIn)
-    if blurIntensity == 0 then
-        RemoveTunnelVision()
+-- This function is namespaced to HardcoreDeathrace to avoid conflicts with Ultra Hardcore
+-- Only creates/manages frames with names starting with "HardcoreDeathraceTunnelVision_"
+local function ShowTunnelVision(blurIntensity, fadeIn)
+    -- Validate blurIntensity parameter
+    if not blurIntensity or blurIntensity < 1 then
+        if blurIntensity == 0 then
+            RemoveTunnelVision()
+        end
         return
     end
     
@@ -444,7 +460,13 @@ function ShowTunnelVision(blurIntensity, fadeIn)
         fadeIn = true
     end
     
+    -- Ensure frame name is properly namespaced to avoid conflicts
     local frameName = 'HardcoreDeathraceTunnelVision_' .. blurIntensity
+    
+    -- Validate frame name to ensure we only manage our own frames
+    if not string.find(frameName, "^HardcoreDeathraceTunnelVision_") then
+        return
+    end
     
     -- Check if frame already exists and is visible
     -- For stacking overlays, we want to keep existing overlays visible
@@ -516,9 +538,21 @@ function ShowTunnelVision(blurIntensity, fadeIn)
     end
 end
 
--- Remove specific tunnel vision overlay
-function RemoveSpecificTunnelVision(blurIntensity)
+-- Remove specific tunnel vision overlay (properly namespaced to avoid conflicts)
+-- This function is namespaced to HardcoreDeathrace to avoid conflicts with Ultra Hardcore
+-- Only removes frames created by this addon, ensuring no interference with other addons
+local function RemoveSpecificTunnelVision(blurIntensity)
+    -- Validate blurIntensity parameter
+    if not blurIntensity or blurIntensity < 1 or blurIntensity > 5 then
+        return
+    end
+    
     local frameName = 'HardcoreDeathraceTunnelVision_' .. blurIntensity
+    
+    -- Validate frame name to ensure we only remove our own frames
+    if not string.find(frameName, "^HardcoreDeathraceTunnelVision_") then
+        return
+    end
     
     if HardcoreDeathrace.tunnelVisionFrames and HardcoreDeathrace.tunnelVisionFrames[frameName] then
         local frame = HardcoreDeathrace.tunnelVisionFrames[frameName]
@@ -526,7 +560,7 @@ function RemoveSpecificTunnelVision(blurIntensity)
             local fadeDuration = 0.5
             UIFrameFadeOut(frame, fadeDuration, frame:GetAlpha(), 0)
             C_Timer.After(fadeDuration + 0.1, function()
-                if frame:GetAlpha() == 0 then
+                if frame and frame:GetAlpha() == 0 then
                     frame:Hide()
                 end
             end)
@@ -534,19 +568,25 @@ function RemoveSpecificTunnelVision(blurIntensity)
     end
 end
 
--- Remove all tunnel vision overlays
-function RemoveTunnelVision()
+-- Remove all tunnel vision overlays (properly namespaced to avoid conflicts)
+-- This function is namespaced to HardcoreDeathrace to avoid conflicts with Ultra Hardcore
+-- Only removes frames created by this addon, ensuring no interference with other addons
+local function RemoveTunnelVision()
     local fadeDuration = 0.5
     
     if HardcoreDeathrace.tunnelVisionFrames then
         for frameName, frame in pairs(HardcoreDeathrace.tunnelVisionFrames) do
-            if frame and frame:IsShown() and frame:GetAlpha() > 0 then
-                UIFrameFadeOut(frame, fadeDuration, frame:GetAlpha(), 0)
-                C_Timer.After(fadeDuration + 0.1, function()
-                    if frame:GetAlpha() == 0 then
-                        frame:Hide()
-                    end
-                end)
+            -- Validate frame name to ensure we only remove our own frames
+            -- Frame names should start with "HardcoreDeathraceTunnelVision_"
+            if frame and frameName and string.find(frameName, "^HardcoreDeathraceTunnelVision_") then
+                if frame:IsShown() and frame:GetAlpha() > 0 then
+                    UIFrameFadeOut(frame, fadeDuration, frame:GetAlpha(), 0)
+                    C_Timer.After(fadeDuration + 0.1, function()
+                        if frame and frame:GetAlpha() == 0 then
+                            frame:Hide()
+                        end
+                    end)
+                end
             end
         end
     end
@@ -1367,6 +1407,8 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
         -- Update UI
         UpdateStatisticsPanel()
     elseif event == 'PLAYER_LOGOUT' then
+        -- Cleanup all tunnel vision frames on logout to avoid conflicts
+        CleanupTunnelVisionFrames()
         SaveCharacterData()
     elseif event == 'PLAYER_ENTERING_WORLD' then
         -- Check if player is resting when entering world (handles zoning/reload)
@@ -1496,7 +1538,35 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
     end
 end)
 
--- Export functions for UI
+-- Cleanup function to remove all tunnel vision frames created by this addon
+-- Called on logout/unload to ensure proper cleanup and avoid conflicts
+local function CleanupTunnelVisionFrames()
+    if HardcoreDeathrace.tunnelVisionFrames then
+        for frameName, frame in pairs(HardcoreDeathrace.tunnelVisionFrames) do
+            -- Validate frame name to ensure we only remove our own frames
+            -- Frame names should start with "HardcoreDeathraceTunnelVision_"
+            if frame and frameName and string.find(frameName, "^HardcoreDeathraceTunnelVision_") then
+                -- Stop any fade animations
+                if UIFrameFadeRemoveFrame then
+                    UIFrameFadeRemoveFrame(frame)
+                end
+                -- Hide and clear the frame
+                frame:Hide()
+                frame:SetParent(nil)
+                frame:SetScript('OnUpdate', nil)
+                -- Clear texture reference
+                if frame.texture then
+                    frame.texture:SetTexture(nil)
+                    frame.texture = nil
+                end
+            end
+        end
+        -- Clear the frames table
+        HardcoreDeathrace.tunnelVisionFrames = {}
+    end
+end
+
+-- Export functions for UI and external access
 HardcoreDeathrace.GetCurrentLevel = function() return currentLevel end
 HardcoreDeathrace.GetTimeRemaining = function() return timeRemainingThisLevel end
 HardcoreDeathrace.GetTotalTimePlayed = function() return totalTimePlayed end
@@ -1513,6 +1583,11 @@ HardcoreDeathrace.GetOriginalTimeAllocation = function() return originalTimeAllo
 HardcoreDeathrace.GetDarknessLevel = GetDarknessLevel
 HardcoreDeathrace.GetTimeUntilNextDarkness = GetTimeUntilNextDarkness
 HardcoreDeathrace.GetAccountHighScore = GetAccountHighScore
+-- Export tunnel vision functions through namespace to avoid conflicts with other addons
+HardcoreDeathrace.RemoveTunnelVision = RemoveTunnelVision
+HardcoreDeathrace.ShowTunnelVision = ShowTunnelVision
+HardcoreDeathrace.RemoveSpecificTunnelVision = RemoveSpecificTunnelVision
+HardcoreDeathrace.CleanupTunnelVisionFrames = CleanupTunnelVisionFrames
 
 -- Slash command handler for /dr fail
 -- Opens the failure screen if the race has failed
@@ -1527,8 +1602,8 @@ local function HandleSlashCommand(msg)
             if ShowFailureScreen then
                 ShowFailureScreen()
                 -- Also show the tunnel vision overlay if not already shown
-                RemoveTunnelVision()
-                ShowTunnelVision(5, false) -- Show instantly, no fade
+                HardcoreDeathrace.RemoveTunnelVision()
+                HardcoreDeathrace.ShowTunnelVision(5, false) -- Show instantly, no fade
             else
                 ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Failure screen function not available.")
             end
