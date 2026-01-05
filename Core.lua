@@ -637,6 +637,10 @@ local function OnPlayerDeath()
     -- Save character data
     SaveCharacterData()
     
+    -- Get previous high score BEFORE saving the new one (for comparison display)
+    -- This ensures we compare against the old value, not the newly saved one
+    local previousHighScore = GetAccountHighScore()
+    
     -- Save account-wide high score if this run is better
     SaveAccountHighScore(totalTimePlayed)
     
@@ -647,8 +651,8 @@ local function OnPlayerDeath()
     RemoveTunnelVision()
     ShowTunnelVision(5, false) -- Show instantly, no fade
     
-    -- Show failure screen
-    ShowFailureScreen()
+    -- Show failure screen (pass previous high score for comparison)
+    ShowFailureScreen(previousHighScore)
     
     -- Update UI to show FAILED
     UpdateStatisticsPanel()
@@ -701,6 +705,9 @@ local function UpdateTimer()
             hasFailed = true
             failureLevel = currentLevel -- Save the level at which they failed
             SaveCharacterData()
+            -- Get previous high score BEFORE saving the new one (for comparison display)
+            -- This ensures we compare against the old value, not the newly saved one
+            local previousHighScore = GetAccountHighScore()
             -- Save account-wide high score if this run is better
             SaveAccountHighScore(totalTimePlayed)
             -- Announce failure
@@ -708,7 +715,7 @@ local function UpdateTimer()
             -- Show tunnel_vision_5.png (all black) when timer runs out
             RemoveTunnelVision()
             ShowTunnelVision(5, false) -- Show instantly, no fade
-            ShowFailureScreen()
+            ShowFailureScreen(previousHighScore)
             UpdateStatisticsPanel() -- Update UI to show FAILED
             return
         end
@@ -871,7 +878,8 @@ local function FormatPlayedTime(seconds)
     return table.concat(parts, ", ")
 end
 
--- Format time in full /played format: "X days, Y hours, Z mins, W secs" (always show all units)
+-- Format time in full /played format: "X days, Y hours, Z mins, W secs" (only show non-zero units)
+-- Simplified format: removes days and hours if they are 0
 local function FormatPlayedTimeFull(seconds)
     if seconds < 0 then
         seconds = 0
@@ -884,9 +892,17 @@ local function FormatPlayedTimeFull(seconds)
     
     local parts = {}
     
-    -- Always show all units for full format
-    table.insert(parts, string.format("%d day%s", days, days == 1 and "" or "s"))
-    table.insert(parts, string.format("%d hour%s", hours, hours == 1 and "" or "s"))
+    -- Only show days if greater than 0
+    if days > 0 then
+        table.insert(parts, string.format("%d day%s", days, days == 1 and "" or "s"))
+    end
+    
+    -- Only show hours if greater than 0
+    if hours > 0 then
+        table.insert(parts, string.format("%d hour%s", hours, hours == 1 and "" or "s"))
+    end
+    
+    -- Always show minutes and seconds
     table.insert(parts, string.format("%d min%s", minutes, minutes == 1 and "" or "s"))
     table.insert(parts, string.format("%d sec%s", secs, secs == 1 and "" or "s"))
     

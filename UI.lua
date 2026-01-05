@@ -509,7 +509,9 @@ function CreateFailureScreen()
 end
 
 -- Show failure screen
-function ShowFailureScreen()
+-- previousHighScore: Optional parameter - the previous high score BEFORE saving the current one
+--                     If not provided, will get it from the database (for /dr fail command)
+function ShowFailureScreen(previousHighScore)
     -- Always recreate to ensure fresh frame with latest code
     CreateFailureScreen()
     
@@ -541,7 +543,11 @@ function ShowFailureScreen()
     failureFrame.scoreValue:SetText('Score: ' .. HardcoreDeathrace.FormatPlayedTimeFull(totalTimePlayed))
     
     -- Get and display previous high score comparison
-    local previousHighScore = HardcoreDeathrace.GetAccountHighScore()
+    -- Use provided previousHighScore if available, otherwise get from database
+    -- This ensures we compare against the OLD high score, not the newly saved one
+    if not previousHighScore then
+        previousHighScore = HardcoreDeathrace.GetAccountHighScore()
+    end
     if previousHighScore and previousHighScore > 0 then
         -- Show the previous high score comparison
         failureFrame.previousHighScoreText:Show()
