@@ -951,6 +951,84 @@ function LB:Initialize()
     end)
 end
 
+-- Calculate player rankings (Realm, Race, Class) based on score
+-- Returns: realmRank, raceRank, classRank (numbers, nil if no data)
+-- Rank 1 = highest score, rank increases as score decreases
+function LB:GetPlayerRankings(playerScore, playerRealm, playerRace, playerClass)
+    if not playerScore or not playerRealm or not playerRace or not playerClass then
+        return nil, nil, nil
+    end
+    
+    local cache = HardcoreDeathraceDB.leaderboard or {}
+    local index = HardcoreDeathraceDB.leaderboardIndex or {}
+    local allRecords = {}
+    
+    -- Build all records list
+    for _, entry in ipairs(index) do
+        local rec = cache[entry.name]
+        if rec then
+            table.insert(allRecords, rec)
+        end
+    end
+    
+    if #allRecords == 0 then
+        return nil, nil, nil
+    end
+    
+    -- Calculate Realm rank (within realm, sorted by score descending)
+    local realmPlayers = {}
+    for _, rec in ipairs(allRecords) do
+        if rec.realm == playerRealm then
+            table.insert(realmPlayers, rec)
+        end
+    end
+    table.sort(realmPlayers, function(a, b) return (a.score or 0) > (b.score or 0) end)
+    
+    local realmRank = nil
+    for i, rec in ipairs(realmPlayers) do
+        if (rec.score or 0) >= playerScore then
+            realmRank = i
+            break
+        end
+    end
+    
+    -- Calculate Race rank (within realm, same race, sorted by score descending)
+    local racePlayers = {}
+    for _, rec in ipairs(allRecords) do
+        if rec.realm == playerRealm and rec.race == playerRace then
+            table.insert(racePlayers, rec)
+        end
+    end
+    table.sort(racePlayers, function(a, b) return (a.score or 0) > (b.score or 0) end)
+    
+    local raceRank = nil
+    for i, rec in ipairs(racePlayers) do
+        if (rec.score or 0) >= playerScore then
+            raceRank = i
+            break
+        end
+    end
+    
+    -- Calculate Class rank (within realm, same class, sorted by score descending)
+    local classPlayers = {}
+    for _, rec in ipairs(allRecords) do
+        if rec.realm == playerRealm and rec.class == playerClass then
+            table.insert(classPlayers, rec)
+        end
+    end
+    table.sort(classPlayers, function(a, b) return (a.score or 0) > (b.score or 0) end)
+    
+    local classRank = nil
+    for i, rec in ipairs(classPlayers) do
+        if (rec.score or 0) >= playerScore then
+            classRank = i
+            break
+        end
+    end
+    
+    return realmRank, raceRank, classRank
+end
+
 -- Export functions for external use
 HardcoreDeathraceLeaderboard = LB
 
