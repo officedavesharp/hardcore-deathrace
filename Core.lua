@@ -305,10 +305,10 @@ end
 
 -- Calculate time until next darkness level (or failure)
 -- Returns time in seconds until next darkness threshold, or nil if no darkness will occur
--- Note: Calculates even when resting (timer paused but thresholds still apply)
+-- Note: Calculates even when resting or on flight path (timer paused but thresholds still apply)
 -- Note: Factors in bonus time from achievements and professions
 local function GetTimeUntilNextDarkness()
-    if hasFailed or hasWon or isOnFlightPath then
+    if hasFailed or hasWon then
         return nil
     end
     

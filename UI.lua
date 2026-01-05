@@ -265,19 +265,13 @@ function UpdateStatisticsPanel()
         statsFrame.darknessValue:Show()
         
         local timeUntilDarkness = HardcoreDeathrace.GetTimeUntilNextDarkness()
-        local isOnFlightPath = HardcoreDeathrace.IsOnFlightPath()
         
         -- Always use white color for darkness falls timer
         statsFrame.darknessValue:SetTextColor(1, 1, 1) -- White
         
         if timeUntilDarkness == nil or timeUntilDarkness < 0 then
-            -- Only show N/A when on flight path (timer paused and moving)
-            if isOnFlightPath then
-                statsFrame.darknessValue:SetText('N/A')
-            else
-                -- Should not happen, but fallback
-                statsFrame.darknessValue:SetText('N/A')
-            end
+            -- Should not happen, but fallback
+            statsFrame.darknessValue:SetText('N/A')
         elseif timeUntilDarkness == 0 then
             -- Already at threshold - calculate current darkness level based on time percentage
             local timeRemaining = HardcoreDeathrace.GetTimeRemaining()
