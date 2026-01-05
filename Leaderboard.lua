@@ -29,6 +29,7 @@ local COLUMNS = {
     { key = "class",   title = "Class",          width = 80,  align = "CENTER" },
     { key = "level",   title = "Level",          width = 60,  align = "CENTER" },
     { key = "score",   title = "Score (Time)",   width = 120, align = "CENTER" },
+    { key = "selfFound", title = "Self-Found",   width = 80,  align = "CENTER" },
     { key = "date",    title = "Date",           width = 100, align = "CENTER" },
     { key = "version", title = "Version",        width = 80,  align = "CENTER" },
 }
@@ -48,6 +49,25 @@ local WoWGetServerTime = GetServerTime
 -- Get current server time (wrapper function)
 local function GetServerTime()
     return (WoWGetServerTime and WoWGetServerTime()) or time()
+end
+
+-- Check if player has the "Self-Found Adventurer" buff
+local function IsSelfFound()
+    -- Check for the "Self-Found Adventurer" buff
+    local buffName = "Self-Found Adventurer"
+    
+    -- Iterate through buff slots (1-40 for Classic Era)
+    for i = 1, 40 do
+        local name = UnitBuff("player", i)
+        if not name then
+            break  -- No more buffs
+        end
+        if name == buffName then
+            return true
+        end
+    end
+    
+    return false
 end
 
 -- Format date from timestamp
@@ -115,6 +135,9 @@ function LB:BuildFailureRecord()
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
     local addonVersion = GetAddOnMetadata("Hardcore Deathrace", "Version") or "1.0.12"
     
+    -- Check if character is self-found
+    local selfFound = IsSelfFound()
+    
     local record = {
         name = charKey,  -- Use name-realm format for uniqueness
         race = playerRace or "Unknown",
@@ -124,6 +147,7 @@ function LB:BuildFailureRecord()
         date = GetServerTime(),  -- Timestamp of failure
         version = addonVersion,
         realm = realmName,
+        selfFound = selfFound,  -- Self-found status
     }
     
     return record
@@ -144,6 +168,9 @@ function LB:BuildSuccessRecord()
     local totalTimePlayed = HardcoreDeathrace.GetTotalTimePlayed()
     local addonVersion = GetAddOnMetadata("Hardcore Deathrace", "Version") or "1.0.12"
     
+    -- Check if character is self-found
+    local selfFound = IsSelfFound()
+    
     local record = {
         name = charKey,  -- Use name-realm format for uniqueness
         race = playerRace or "Unknown",
@@ -153,6 +180,7 @@ function LB:BuildSuccessRecord()
         date = GetServerTime(),  -- Timestamp of success
         version = addonVersion,
         realm = realmName,
+        selfFound = selfFound,  -- Self-found status
     }
     
     return record
@@ -186,6 +214,7 @@ function LB:StoreRecord(record)
             date = record.date,
             version = record.version,
             realm = record.realm,
+            selfFound = record.selfFound or false,  -- Self-found status
         }
         
         -- Update index (sorted by date, newest first)
@@ -224,6 +253,7 @@ function LB:StoreRecord(record)
             date = record.date,
             version = record.version,
             realm = record.realm,
+            selfFound = record.selfFound or false,  -- Self-found status
             last = GetServerTime(),
         }
         
@@ -241,15 +271,16 @@ function LB:BroadcastRecord(record)
     end
     
     -- Serialize the record (simple table serialization)
-    -- Format: name|race|class|level|score|date|version
-    local payload = string.format("%s|%s|%s|%d|%d|%d|%s", 
+    -- Format: name|race|class|level|score|date|version|selfFound
+    local payload = string.format("%s|%s|%s|%d|%d|%d|%s|%d", 
         record.name or "",
         record.race or "Unknown",
         record.class or "Unknown",
         record.level or 0,
         record.score or 0,
         record.date or GetServerTime(),
-        record.version or "1.0.12"
+        record.version or "1.0.12",
+        (record.selfFound and 1) or 0  -- Convert boolean to 1/0
     )
     
     -- Broadcast exclusively via DeathRace custom channel (realm-wide, works solo)
@@ -365,6 +396,7 @@ function LB:OnMessageReceived(prefix, message, channel, sender)
                                 score = tonumber(parts[5]) or 0,
                                 date = tonumber(parts[6]) or GetServerTime(),
                                 version = parts[7] or "1.0.12",
+                                selfFound = (#parts >= 8 and tonumber(parts[8]) == 1) or false,  -- Support old format
                             })
                         end
                     end
@@ -408,6 +440,7 @@ function LB:OnMessageReceived(prefix, message, channel, sender)
                             score = tonumber(parts[5]) or 0,
                             date = tonumber(parts[6]) or GetServerTime(),
                             version = parts[7] or "1.0.12",
+                            selfFound = (#parts >= 8 and tonumber(parts[8]) == 1) or false,  -- Support old format
                         })
                     end
                 end
@@ -427,20 +460,20 @@ function LB:OnMessageReceived(prefix, message, channel, sender)
         return
     end
     
-    -- Regular single record message: name|race|class|level|score|date|version
+    -- Regular single record message: name|race|class|level|score|date|version|selfFound
     local parts = {}
     for part in string.gmatch(message, "([^|]+)") do
         table.insert(parts, part)
     end
     
-    -- Support both old format (5 parts) and new format (7 parts)
+    -- Support old formats (5 parts, 7 parts) and new format (8 parts with selfFound)
     if #parts < 5 then
         return  -- Invalid message format
     end
     
     local record
-    if #parts >= 7 then
-        -- New format with race and class
+    if #parts >= 8 then
+        -- New format with race, class, and selfFound
         record = {
             name = parts[1],
             race = parts[2] or "Unknown",
@@ -449,6 +482,19 @@ function LB:OnMessageReceived(prefix, message, channel, sender)
             score = tonumber(parts[5]) or 0,
             date = tonumber(parts[6]) or GetServerTime(),
             version = parts[7] or "1.0.12",
+            selfFound = (tonumber(parts[8]) == 1),  -- Convert 1/0 back to boolean
+        }
+    elseif #parts >= 7 then
+        -- Format with race and class (no selfFound)
+        record = {
+            name = parts[1],
+            race = parts[2] or "Unknown",
+            class = parts[3] or "Unknown",
+            level = tonumber(parts[4]) or 0,
+            score = tonumber(parts[5]) or 0,
+            date = tonumber(parts[6]) or GetServerTime(),
+            version = parts[7] or "1.0.12",
+            selfFound = false,  -- Default to false for old records
         }
     else
         -- Old format (backwards compatibility)
@@ -460,6 +506,7 @@ function LB:OnMessageReceived(prefix, message, channel, sender)
             score = tonumber(parts[3]) or 0,
             date = tonumber(parts[4]) or GetServerTime(),
             version = parts[5] or "1.0.12",
+            selfFound = false,  -- Default to false for old records
         }
     end
     
@@ -512,6 +559,7 @@ function LB:BuildRowsForUI()
                 score = rec.score or 0,
                 date = rec.date or 0,
                 version = rec.version or "1.0.12",
+                selfFound = rec.selfFound or false,
             })
         end
     end
@@ -529,6 +577,8 @@ local function valueForSort(row, key)
         return tonumber(row.level) or 0
     elseif key == "date" then
         return tonumber(row.date) or 0
+    elseif key == "selfFound" then
+        return (row.selfFound and 1) or 0  -- Sort boolean as 1/0
     else
         return 0
     end
@@ -578,11 +628,11 @@ function LB:CreateFrame()
         return LB_FRAME
     end
     
-    -- Create main frame (wider to accommodate race and class columns)
-    -- Column widths: 120+80+80+60+120+100+80 = 640, plus 6×10 spacing = 60, plus padding = ~80
+    -- Create main frame (wider to accommodate all columns including self-found)
+    -- Column widths: 120+80+80+60+120+100+80+80 = 720, plus 7×10 spacing = 70, plus padding = ~80
     local f = CreateFrame("Frame", "HardcoreDeathraceLeaderboardFrame", UIParent, "BasicFrameTemplateWithInset")
     f:SetFrameStrata("HIGH")
-    f:SetSize(780, 450)  -- Increased width to 780 to properly fit all 7 columns with adequate spacing
+    f:SetSize(860, 450)  -- Increased width to 860 to properly fit all 8 columns with adequate spacing
     f:SetPoint("CENTER")
     f:Hide()
     
@@ -820,10 +870,17 @@ function LB:RefreshUI()
         row.cols[3]:SetText(rowData.class or "Unknown")  -- Class
         row.cols[4]:SetText(tostring(rowData.level))  -- Level
         row.cols[5]:SetText(FormatScore(rowData.score))  -- Score (time)
-        row.cols[6]:SetText(FormatDate(rowData.date))  -- Date
-        row.cols[7]:SetText(rowData.version)  -- Version
+        -- Self-Found column: show checkmark (✓) if self-found, empty otherwise
+        if rowData.selfFound then
+            row.cols[6]:SetText("✓")  -- Checkmark character
+            row.cols[6]:SetTextColor(0, 1, 0)  -- Green color for checkmark
+        else
+            row.cols[6]:SetText("")  -- Empty for non-self-found
+        end
+        row.cols[7]:SetText(FormatDate(rowData.date))  -- Date
+        row.cols[8]:SetText(rowData.version)  -- Version
         
-        -- Color code: highlight top scores
+        -- Color code: highlight top scores (but preserve green checkmark in self-found column)
         local r, g, b = 1, 1, 1  -- Default white
         if i == 1 then
             r, g, b = 1, 0.84, 0  -- Gold for #1
@@ -833,8 +890,11 @@ function LB:RefreshUI()
             r, g, b = 0.8, 0.5, 0.2  -- Bronze for #3
         end
         
-        for _, fs in ipairs(row.cols) do
-            fs:SetTextColor(r, g, b)
+        -- Apply color to all columns except self-found (column 6) which keeps its green checkmark
+        for j, fs in ipairs(row.cols) do
+            if j ~= 6 then  -- Don't override self-found column color
+                fs:SetTextColor(r, g, b)
+            end
         end
         
         row:Show()
@@ -900,17 +960,18 @@ function LB:SendSnapshot(target)
     end
     
     -- Serialize records into snapshot format
-    -- Format per record: name:race:class:level:score:date:version
+    -- Format per record: name:race:class:level:score:date:version:selfFound
     local recordStrings = {}
     for _, rec in ipairs(records) do
-        local recordStr = string.format("%s:%s:%s:%d:%d:%d:%s",
+        local recordStr = string.format("%s:%s:%s:%d:%d:%d:%s:%d",
             rec.name or "",
             rec.race or "Unknown",
             rec.class or "Unknown",
             rec.level or 0,
             rec.score or 0,
             rec.date or GetServerTime(),
-            rec.version or "1.0.12"
+            rec.version or "1.0.12",
+            (rec.selfFound and 1) or 0  -- Convert boolean to 1/0
         )
         table.insert(recordStrings, recordStr)
     end
