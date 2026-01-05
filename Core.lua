@@ -689,9 +689,9 @@ local function OnPlayerDeath()
         local failureRecord = HardcoreDeathraceLeaderboard:BuildFailureRecord()
         if failureRecord then
             -- Store locally
-            HardcoreDeathraceLeaderboard:StoreFailureRecord(failureRecord)
+            HardcoreDeathraceLeaderboard:StoreRecord(failureRecord)
             -- Broadcast to other players
-            HardcoreDeathraceLeaderboard:BroadcastFailure(failureRecord)
+            HardcoreDeathraceLeaderboard:BroadcastRecord(failureRecord)
         end
     end
     
@@ -767,9 +767,9 @@ local function UpdateTimer()
                 local failureRecord = HardcoreDeathraceLeaderboard:BuildFailureRecord()
                 if failureRecord then
                     -- Store locally
-                    HardcoreDeathraceLeaderboard:StoreFailureRecord(failureRecord)
+                    HardcoreDeathraceLeaderboard:StoreRecord(failureRecord)
                     -- Broadcast to other players
-                    HardcoreDeathraceLeaderboard:BroadcastFailure(failureRecord)
+                    HardcoreDeathraceLeaderboard:BroadcastRecord(failureRecord)
                 end
             end
             
@@ -834,6 +834,18 @@ local function OnLevelUp(newLevel)
         hasWon = true
         currentLevel = 60
         SaveCharacterData()
+        
+        -- Broadcast success to leaderboard
+        if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.BuildSuccessRecord then
+            local successRecord = HardcoreDeathraceLeaderboard:BuildSuccessRecord()
+            if successRecord then
+                -- Store locally
+                HardcoreDeathraceLeaderboard:StoreRecord(successRecord)
+                -- Broadcast to other players
+                HardcoreDeathraceLeaderboard:BroadcastRecord(successRecord)
+            end
+        end
+        
         -- Clear tunnel vision on win
         RemoveTunnelVision()
         previousDarknessLevel = 0
@@ -965,8 +977,12 @@ local function FormatPlayedTimeFull(seconds)
         table.insert(parts, string.format("%d hour%s", hours, hours == 1 and "" or "s"))
     end
     
-    -- Always show minutes and seconds
-    table.insert(parts, string.format("%d min%s", minutes, minutes == 1 and "" or "s"))
+    -- Only show minutes if greater than 0
+    if minutes > 0 then
+        table.insert(parts, string.format("%d min%s", minutes, minutes == 1 and "" or "s"))
+    end
+    
+    -- Always show seconds
     table.insert(parts, string.format("%d sec%s", secs, secs == 1 and "" or "s"))
     
     return table.concat(parts, ", ")
