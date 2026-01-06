@@ -43,6 +43,9 @@ local sortState = {
 -- Track seen entries (for online/offline status)
 LB.seen = LB.seen or {}
 
+-- Track if we've already broadcast on this login session (prevents spam)
+LB.hasBroadcastOnLogin = false
+
 -- Store reference to WoW API GetServerTime before we define our wrapper
 local WoWGetServerTime = GetServerTime
 
@@ -320,6 +323,142 @@ function LB:BroadcastRecord(record)
             end
         end
     end
+end
+
+-- Broadcast all records belonging to the current player (throttled to prevent spam)
+-- Called once per login session to ensure other players get our saved records
+function LB:BroadcastAllMyRecords()
+    -- Only broadcast once per login session
+    if LB.hasBroadcastOnLogin then
+        return
+    end
+    
+    -- Check if channel is ready
+    if not HardcoreDeathraceJoinChannel then
+        -- Channel system not ready, retry after a delay
+        C_Timer.After(2, function()
+            LB:BroadcastAllMyRecords()
+        end)
+        return
+    end
+    
+    local deathRaceChannelID = HardcoreDeathraceJoinChannel.GetChannelID()
+    if deathRaceChannelID == 0 or not deathRaceChannelID then
+        -- Not in channel yet, try to join and retry
+        if HardcoreDeathraceJoinChannel.JoinChannel then
+            HardcoreDeathraceJoinChannel.JoinChannel(true)  -- Force join
+        end
+        C_Timer.After(2, function()
+            LB:BroadcastAllMyRecords()
+        end)
+        return
+    end
+    
+    -- Even if channel ID exists, ensure we're properly joined (checkbox checked)
+    -- Force a rejoin to ensure channel is active for addon messages
+    if HardcoreDeathraceJoinChannel.JoinChannel then
+        HardcoreDeathraceJoinChannel.JoinChannel(true)  -- Force rejoin to ensure checkbox is checked
+    end
+    -- Wait a moment for join to complete before broadcasting
+    C_Timer.After(1, function()
+        -- Verify channel is ready after forced join
+        local verifyChannelID = HardcoreDeathraceJoinChannel.GetChannelID()
+        if verifyChannelID == 0 then
+            -- Still not ready, retry
+            C_Timer.After(2, function()
+                LB:BroadcastAllMyRecords()
+            end)
+            return
+        end
+        
+        -- Get current player's character key (name-realm format)
+        local playerName = UnitName("player")
+        local realmName = GetRealmName()
+        if not playerName or not realmName then
+            -- Can't identify player yet, retry after a delay
+            C_Timer.After(1, function()
+                LB:BroadcastAllMyRecords()
+            end)
+            return
+        end
+        
+        local charKey = playerName .. "-" .. realmName
+        
+        -- Get all records from storage
+        local cache = HardcoreDeathraceDB.leaderboard or {}
+        local index = HardcoreDeathraceDB.leaderboardIndex or {}
+        local myRecords = {}
+        
+        -- Find all records belonging to the current player
+        for _, entry in ipairs(index) do
+            local rec = cache[entry.name]
+            if rec and rec.name == charKey then
+                table.insert(myRecords, rec)
+            end
+        end
+        
+        -- Also check if player has a current failure/success that needs to be broadcast
+        -- This handles cases where the record might not have been stored properly
+        if HardcoreDeathrace then
+            local hasFailed = HardcoreDeathrace.HasFailed and HardcoreDeathrace.HasFailed()
+            local hasWon = HardcoreDeathrace.HasWon and HardcoreDeathrace.HasWon()
+            
+            if hasFailed and LB.BuildFailureRecord then
+                -- Player has failed - build and add failure record if not already in list
+                local failureRecord = LB:BuildFailureRecord()
+                if failureRecord then
+                    -- Check if this record is already in myRecords
+                    local alreadyHave = false
+                    for _, rec in ipairs(myRecords) do
+                        if rec.name == failureRecord.name and rec.date == failureRecord.date then
+                            alreadyHave = true
+                            break
+                        end
+                    end
+                    if not alreadyHave then
+                        -- Store it first, then add to broadcast list
+                        LB:StoreRecord(failureRecord)
+                        table.insert(myRecords, failureRecord)
+                    end
+                end
+            elseif hasWon and LB.BuildSuccessRecord then
+                -- Player has won - build and add success record if not already in list
+                local successRecord = LB:BuildSuccessRecord()
+                if successRecord then
+                    -- Check if this record is already in myRecords
+                    local alreadyHave = false
+                    for _, rec in ipairs(myRecords) do
+                        if rec.name == successRecord.name and rec.date == successRecord.date then
+                            alreadyHave = true
+                            break
+                        end
+                    end
+                    if not alreadyHave then
+                        -- Store it first, then add to broadcast list
+                        LB:StoreRecord(successRecord)
+                        table.insert(myRecords, successRecord)
+                    end
+                end
+            end
+        end
+        
+        -- If no records, nothing to broadcast
+        if #myRecords == 0 then
+            LB.hasBroadcastOnLogin = true  -- Mark as done even if no records
+            return
+        end
+        
+        -- Broadcast each record with a small delay between them to prevent spam
+        -- Delay: 0.2 seconds between each record
+        for i, record in ipairs(myRecords) do
+            C_Timer.After(0.2 * i, function()
+                LB:BroadcastRecord(record)
+            end)
+        end
+        
+        -- Mark as broadcasted for this session
+        LB.hasBroadcastOnLogin = true
+    end)
 end
 
 -- Handle incoming leaderboard messages
@@ -1011,6 +1150,9 @@ end
 
 -- Initialize leaderboard system
 function LB:Initialize()
+    -- Reset broadcast flag for new login session
+    LB.hasBroadcastOnLogin = false
+    
     -- Register for addon messages
     LB:RegisterComm()
     
@@ -1027,6 +1169,13 @@ function LB:Initialize()
     -- Request snapshot of all leaderboard data after a delay (wait for channel to be ready)
     C_Timer.After(3, function()
         LB:RequestSnapshot()
+    end)
+    
+    -- Broadcast all our saved records after a longer delay (8 seconds)
+    -- This ensures the channel is ready and we've given others time to respond to our snapshot request
+    -- Only happens once per login session to prevent spam
+    C_Timer.After(8, function()
+        LB:BroadcastAllMyRecords()
     end)
 end
 

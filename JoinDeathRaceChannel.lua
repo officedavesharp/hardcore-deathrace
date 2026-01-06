@@ -16,7 +16,7 @@ local CHANNEL_NAME = "DeathRace"
 local channelJoined = false
 local lastJoinAttempt = 0
 local JOIN_RETRY_DELAY = 30 -- Retry joining every 30 seconds if not in channel
-local PERIODIC_CHECK_INTERVAL = 60 -- Check channel status every 60 seconds
+local PERIODIC_CHECK_INTERVAL = 10 -- Check channel status every 10 seconds (more frequent to catch issues)
 
 -- Function to join the DeathRace channel
 function JoinDeathRaceChannel(force)
@@ -31,7 +31,8 @@ function JoinDeathRaceChannel(force)
     C_Timer.After(0.5, function()
         local channelID = select(1, GetChannelName(CHANNEL_NAME))
         
-        -- If not already in the channel, join it
+        -- Always ensure we're properly joined, even if channelID exists
+        -- If channel exists but checkbox is unchecked, we need to rejoin
         if channelID == 0 then
             channelJoined = false
             
@@ -49,6 +50,13 @@ function JoinDeathRaceChannel(force)
                     -- Still not in channel, add to chat frame to force join
                     -- Note: The channel will appear in chat but addon messages are invisible anyway
                     ChatFrame_AddChannel(DEFAULT_CHAT_FRAME, CHANNEL_NAME)
+                    -- Verify again after adding to chat frame
+                    C_Timer.After(0.5, function()
+                        local finalVerify = select(1, GetChannelName(CHANNEL_NAME))
+                        if finalVerify > 0 then
+                            channelJoined = true
+                        end
+                    end)
                 else
                     channelJoined = true
                 end
@@ -65,6 +73,13 @@ function JoinDeathRaceChannel(force)
                                 local finalCheck = select(1, GetChannelName(CHANNEL_NAME))
                                 if finalCheck == 0 then
                                     ChatFrame_AddChannel(DEFAULT_CHAT_FRAME, CHANNEL_NAME)
+                                    -- Verify again after adding to chat frame
+                                    C_Timer.After(0.5, function()
+                                        local finalVerify = select(1, GetChannelName(CHANNEL_NAME))
+                                        if finalVerify > 0 then
+                                            channelJoined = true
+                                        end
+                                    end)
                                 else
                                     channelJoined = true
                                 end
@@ -76,8 +91,23 @@ function JoinDeathRaceChannel(force)
                 end)
             end
         else
-            -- Already in channel
-            channelJoined = true
+            -- Channel ID exists, but we need to ensure it's properly joined (checkbox checked)
+            -- Force rejoin to ensure channel is active - this handles cases where channel exists
+            -- but checkbox is unchecked (channel not properly joined for addon messages)
+            JoinChannelByName(CHANNEL_NAME)
+            C_Timer.After(0.5, function()
+                -- Ensure it's added to chat frame to activate it properly
+                ChatFrame_AddChannel(DEFAULT_CHAT_FRAME, CHANNEL_NAME)
+                -- Verify we're actually in the channel
+                C_Timer.After(0.5, function()
+                    local verifyID = select(1, GetChannelName(CHANNEL_NAME))
+                    if verifyID > 0 then
+                        channelJoined = true
+                    else
+                        channelJoined = false
+                    end
+                end)
+            end)
         end
     end)
 end
@@ -91,9 +121,20 @@ local function PeriodicChannelCheck()
         -- Not in channel, attempt to rejoin
         -- This ensures the channel persists as long as at least one player with the addon is online
         channelJoined = false
-        JoinDeathRaceChannel()
+        JoinDeathRaceChannel(true)  -- Force rejoin
     else
-        channelJoined = true
+        -- Channel ID exists, but verify we're properly joined by ensuring it's in chat frame
+        -- This handles cases where channel exists but checkbox is unchecked
+        if not channelJoined then
+            -- Channel exists but we're not marked as joined - force rejoin
+            JoinChannelByName(CHANNEL_NAME)
+            C_Timer.After(0.5, function()
+                ChatFrame_AddChannel(DEFAULT_CHAT_FRAME, CHANNEL_NAME)
+                channelJoined = true
+            end)
+        else
+            channelJoined = true
+        end
     end
 end
 
