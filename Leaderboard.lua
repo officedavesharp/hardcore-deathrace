@@ -45,6 +45,15 @@ LB.seen = LB.seen or {}
 
 -- Track if we've already broadcast on this login session (prevents spam)
 LB.hasBroadcastOnLogin = false
+-- Track broadcast counter for debugging
+LB.broadcastCounter = 0
+
+-- Helper function to print debug messages (only if debug is enabled)
+local function DebugPrint(message)
+    if HardcoreDeathraceDB and HardcoreDeathraceDB.debugEnabled then
+        ChatFrame1:AddMessage(message)
+    end
+end
 
 -- Store reference to WoW API GetServerTime before we define our wrapper
 local WoWGetServerTime = GetServerTime
@@ -286,14 +295,27 @@ function LB:BroadcastRecord(record)
         (record.selfFound and 1) or 0  -- Convert boolean to 1/0
     )
     
+    -- Increment broadcast counter for debugging
+    LB.broadcastCounter = (LB.broadcastCounter or 0) + 1
+    
+    -- DEBUG: Show broadcast message
+    local nameDisplay = record.name
+    if nameDisplay:find("-") then
+        nameDisplay = nameDisplay:match("^([^-]+)")
+    end
+    DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r [Broadcast #%d] Broadcasting record: %s (Level %d, Score: %s, Date: %d)", 
+        LB.broadcastCounter, nameDisplay, record.level or 0, FormatScore(record.score or 0), record.date or 0))
+    
     -- Broadcast exclusively via DeathRace custom channel (realm-wide, works solo)
     -- Use SendAddonMessage for addon-to-addon communication (invisible to players)
+    local broadcastSuccess = false
     if C_ChatInfo and C_ChatInfo.SendAddonMessage then
         -- Modern API (Classic Era compatible)
         if HardcoreDeathraceJoinChannel then
             local deathRaceChannelID = HardcoreDeathraceJoinChannel.GetChannelID()
             if deathRaceChannelID > 0 then
                 C_ChatInfo.SendAddonMessage(PREFIX, payload, "CHANNEL", deathRaceChannelID)
+                broadcastSuccess = true
             else
                 -- Not in channel yet, try to join and retry broadcast
                 HardcoreDeathraceJoinChannel.JoinChannel()
@@ -301,6 +323,9 @@ function LB:BroadcastRecord(record)
                     local retryChannelID = HardcoreDeathraceJoinChannel.GetChannelID()
                     if retryChannelID > 0 then
                         C_ChatInfo.SendAddonMessage(PREFIX, payload, "CHANNEL", retryChannelID)
+                        DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r [Broadcast #%d] Broadcast retry successful", LB.broadcastCounter))
+                    else
+                        DebugPrint(string.format("|cFFFF0000[Hardcore Deathrace DEBUG]|r [Broadcast #%d] Broadcast failed - channel not ready", LB.broadcastCounter))
                     end
                 end)
             end
@@ -311,6 +336,7 @@ function LB:BroadcastRecord(record)
             local deathRaceChannelID = HardcoreDeathraceJoinChannel.GetChannelID()
             if deathRaceChannelID > 0 then
                 SendAddonMessage(PREFIX, payload, "CHANNEL", deathRaceChannelID)
+                broadcastSuccess = true
             else
                 -- Not in channel yet, try to join and retry broadcast
                 HardcoreDeathraceJoinChannel.JoinChannel()
@@ -318,10 +344,18 @@ function LB:BroadcastRecord(record)
                     local retryChannelID = HardcoreDeathraceJoinChannel.GetChannelID()
                     if retryChannelID > 0 then
                         SendAddonMessage(PREFIX, payload, "CHANNEL", retryChannelID)
+                        DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r [Broadcast #%d] Broadcast retry successful", LB.broadcastCounter))
+                    else
+                        DebugPrint(string.format("|cFFFF0000[Hardcore Deathrace DEBUG]|r [Broadcast #%d] Broadcast failed - channel not ready", LB.broadcastCounter))
                     end
                 end)
             end
         end
+    end
+    
+    if broadcastSuccess then
+        DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r [Broadcast #%d] Broadcast sent successfully (Channel ID: %d)", 
+            LB.broadcastCounter, HardcoreDeathraceJoinChannel and HardcoreDeathraceJoinChannel.GetChannelID() or 0))
     end
 end
 
@@ -330,12 +364,16 @@ end
 function LB:BroadcastAllMyRecords()
     -- Only broadcast once per login session
     if LB.hasBroadcastOnLogin then
+        DebugPrint("|cFFFF0000[Hardcore Deathrace DEBUG]|r Already broadcasted this session, skipping")
         return
     end
+    
+    DebugPrint("|cFF00FF00[Hardcore Deathrace DEBUG]|r BroadcastAllMyRecords called - checking channel...")
     
     -- Check if channel is ready
     if not HardcoreDeathraceJoinChannel then
         -- Channel system not ready, retry after a delay
+        DebugPrint("|cFFFF0000[Hardcore Deathrace DEBUG]|r Channel system not ready, retrying in 2 seconds...")
         C_Timer.After(2, function()
             LB:BroadcastAllMyRecords()
         end)
@@ -343,8 +381,11 @@ function LB:BroadcastAllMyRecords()
     end
     
     local deathRaceChannelID = HardcoreDeathraceJoinChannel.GetChannelID()
+    DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r Current channel ID: %d", deathRaceChannelID or 0))
+    
     if deathRaceChannelID == 0 or not deathRaceChannelID then
         -- Not in channel yet, try to join and retry
+        DebugPrint("|cFFFF0000[Hardcore Deathrace DEBUG]|r Not in channel, attempting to join...")
         if HardcoreDeathraceJoinChannel.JoinChannel then
             HardcoreDeathraceJoinChannel.JoinChannel(true)  -- Force join
         end
@@ -356,6 +397,7 @@ function LB:BroadcastAllMyRecords()
     
     -- Even if channel ID exists, ensure we're properly joined (checkbox checked)
     -- Force a rejoin to ensure channel is active for addon messages
+    DebugPrint("|cFF00FF00[Hardcore Deathrace DEBUG]|r Channel exists, forcing rejoin to ensure checkbox is checked...")
     if HardcoreDeathraceJoinChannel.JoinChannel then
         HardcoreDeathraceJoinChannel.JoinChannel(true)  -- Force rejoin to ensure checkbox is checked
     end
@@ -363,13 +405,16 @@ function LB:BroadcastAllMyRecords()
     C_Timer.After(1, function()
         -- Verify channel is ready after forced join
         local verifyChannelID = HardcoreDeathraceJoinChannel.GetChannelID()
+        DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r Verifying channel after forced join - Channel ID: %d", verifyChannelID or 0))
         if verifyChannelID == 0 then
             -- Still not ready, retry
+            DebugPrint("|cFFFF0000[Hardcore Deathrace DEBUG]|r Channel still not ready after forced join, retrying in 2 seconds...")
             C_Timer.After(2, function()
                 LB:BroadcastAllMyRecords()
             end)
             return
         end
+        DebugPrint("|cFF00FF00[Hardcore Deathrace DEBUG]|r Channel verified ready, proceeding with broadcast...")
         
         -- Get current player's character key (name-realm format)
         local playerName = UnitName("player")
@@ -390,12 +435,25 @@ function LB:BroadcastAllMyRecords()
         local myRecords = {}
         
         -- Find all records belonging to the current player
+        -- Only keep the best record per character (highest score)
+        local bestRecord = nil
         for _, entry in ipairs(index) do
             local rec = cache[entry.name]
             if rec and rec.name == charKey then
-                table.insert(myRecords, rec)
+                DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r Found stored record: %s (Level %d, Score: %s, Date: %d)", 
+                    rec.name, rec.level or 0, FormatScore(rec.score or 0), rec.date or 0))
+                -- Only keep the best record (highest score)
+                if not bestRecord or (rec.score or 0) > (bestRecord.score or 0) then
+                    bestRecord = rec
+                end
             end
         end
+        if bestRecord then
+            DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r Best stored record: %s (Level %d, Score: %s)", 
+                bestRecord.name, bestRecord.level or 0, FormatScore(bestRecord.score or 0)))
+            table.insert(myRecords, bestRecord)
+        end
+        DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r Found %d record(s) from storage (after deduplication)", #myRecords))
         
         -- Also check if player has a current failure/success that needs to be broadcast
         -- This handles cases where the record might not have been stored properly
@@ -404,36 +462,76 @@ function LB:BroadcastAllMyRecords()
             local hasWon = HardcoreDeathrace.HasWon and HardcoreDeathrace.HasWon()
             
             if hasFailed and LB.BuildFailureRecord then
-                -- Player has failed - build and add failure record if not already in list
+                -- Player has failed - build and add failure record if it's better than what we have
+                DebugPrint("|cFF00FF00[Hardcore Deathrace DEBUG]|r Player has failed, checking for current failure record...")
                 local failureRecord = LB:BuildFailureRecord()
                 if failureRecord then
-                    -- Check if this record is already in myRecords
-                    local alreadyHave = false
-                    for _, rec in ipairs(myRecords) do
-                        if rec.name == failureRecord.name and rec.date == failureRecord.date then
-                            alreadyHave = true
+                    DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r Built failure record: %s (Level %d, Score: %s, Date: %d)", 
+                        failureRecord.name, failureRecord.level or 0, FormatScore(failureRecord.score or 0), failureRecord.date or 0))
+                    -- Check if we already have a record for this character
+                    local existingRecord = nil
+                    local existingIndex = nil
+                    for i, rec in ipairs(myRecords) do
+                        if rec.name == failureRecord.name then
+                            existingRecord = rec
+                            existingIndex = i
                             break
                         end
                     end
-                    if not alreadyHave then
+                    
+                    if existingRecord then
+                        -- Compare scores - only replace if new record is better
+                        if (failureRecord.score or 0) > (existingRecord.score or 0) then
+                            DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r New failure record is better (Score: %s > %s), replacing existing", 
+                                FormatScore(failureRecord.score or 0), FormatScore(existingRecord.score or 0)))
+                            -- Store it first, then replace in broadcast list
+                            LB:StoreRecord(failureRecord)
+                            myRecords[existingIndex] = failureRecord
+                        else
+                            DebugPrint(string.format("|cFFFF0000[Hardcore Deathrace DEBUG]|r Existing record is better (Score: %s >= %s), keeping existing", 
+                                FormatScore(existingRecord.score or 0), FormatScore(failureRecord.score or 0)))
+                        end
+                    else
+                        -- No existing record for this character, add it
+                        DebugPrint("|cFF00FF00[Hardcore Deathrace DEBUG]|r No existing record found, adding failure record to broadcast list")
                         -- Store it first, then add to broadcast list
                         LB:StoreRecord(failureRecord)
                         table.insert(myRecords, failureRecord)
                     end
                 end
             elseif hasWon and LB.BuildSuccessRecord then
-                -- Player has won - build and add success record if not already in list
+                -- Player has won - build and add success record if it's better than what we have
+                DebugPrint("|cFF00FF00[Hardcore Deathrace DEBUG]|r Player has won, checking for current success record...")
                 local successRecord = LB:BuildSuccessRecord()
                 if successRecord then
-                    -- Check if this record is already in myRecords
-                    local alreadyHave = false
-                    for _, rec in ipairs(myRecords) do
-                        if rec.name == successRecord.name and rec.date == successRecord.date then
-                            alreadyHave = true
+                    DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r Built success record: %s (Level %d, Score: %s, Date: %d)", 
+                        successRecord.name, successRecord.level or 0, FormatScore(successRecord.score or 0), successRecord.date or 0))
+                    -- Check if we already have a record for this character
+                    local existingRecord = nil
+                    local existingIndex = nil
+                    for i, rec in ipairs(myRecords) do
+                        if rec.name == successRecord.name then
+                            existingRecord = rec
+                            existingIndex = i
                             break
                         end
                     end
-                    if not alreadyHave then
+                    
+                    if existingRecord then
+                        -- Compare scores - only replace if new record is better
+                        if (successRecord.score or 0) > (existingRecord.score or 0) then
+                            DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r New success record is better (Score: %s > %s), replacing existing", 
+                                FormatScore(successRecord.score or 0), FormatScore(existingRecord.score or 0)))
+                            -- Store it first, then replace in broadcast list
+                            LB:StoreRecord(successRecord)
+                            myRecords[existingIndex] = successRecord
+                        else
+                            DebugPrint(string.format("|cFFFF0000[Hardcore Deathrace DEBUG]|r Existing record is better (Score: %s >= %s), keeping existing", 
+                                FormatScore(existingRecord.score or 0), FormatScore(successRecord.score or 0)))
+                        end
+                    else
+                        -- No existing record for this character, add it
+                        DebugPrint("|cFF00FF00[Hardcore Deathrace DEBUG]|r No existing record found, adding success record to broadcast list")
                         -- Store it first, then add to broadcast list
                         LB:StoreRecord(successRecord)
                         table.insert(myRecords, successRecord)
@@ -444,9 +542,13 @@ function LB:BroadcastAllMyRecords()
         
         -- If no records, nothing to broadcast
         if #myRecords == 0 then
+            DebugPrint("|cFFFF0000[Hardcore Deathrace DEBUG]|r No records found to broadcast")
             LB.hasBroadcastOnLogin = true  -- Mark as done even if no records
             return
         end
+        
+        -- DEBUG: Show that we're starting to broadcast records
+        DebugPrint(string.format("|cFF00FF00[Hardcore Deathrace DEBUG]|r Starting to broadcast %d record(s) on login...", #myRecords))
         
         -- Broadcast each record with a small delay between them to prevent spam
         -- Delay: 0.2 seconds between each record
@@ -458,6 +560,7 @@ function LB:BroadcastAllMyRecords()
         
         -- Mark as broadcasted for this session
         LB.hasBroadcastOnLogin = true
+        DebugPrint("|cFF00FF00[Hardcore Deathrace DEBUG]|r All records queued for broadcast")
     end)
 end
 

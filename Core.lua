@@ -1638,8 +1638,17 @@ HardcoreDeathrace.ShowTunnelVision = ShowTunnelVision
 HardcoreDeathrace.RemoveSpecificTunnelVision = RemoveSpecificTunnelVision
 HardcoreDeathrace.CleanupTunnelVisionFrames = CleanupTunnelVisionFrames
 
--- Slash command handler for /dr fail and /drlb
--- Opens the failure screen if the race has failed, or toggles leaderboard
+-- Initialize debug flag in saved variables
+HardcoreDeathraceDB = HardcoreDeathraceDB or {}
+HardcoreDeathraceDB.debugEnabled = HardcoreDeathraceDB.debugEnabled or false
+
+-- Helper function to check if debug is enabled
+function HardcoreDeathrace.IsDebugEnabled()
+    return HardcoreDeathraceDB.debugEnabled == true
+end
+
+-- Slash command handler for /dr fail and /dr debug
+-- Opens the failure screen if the race has failed, or toggles debug mode
 local function HandleSlashCommand(msg)
     -- Trim whitespace and convert to lowercase for comparison
     local command = string.lower(string.gsub(msg, "^%s*(.-)%s*$", "%1"))
@@ -1659,10 +1668,27 @@ local function HandleSlashCommand(msg)
         else
             ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Your race has not failed yet.")
         end
+    elseif command == "debug on" then
+        HardcoreDeathraceDB.debugEnabled = true
+        ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r Debug mode enabled.")
+    elseif command == "debug off" then
+        HardcoreDeathraceDB.debugEnabled = false
+        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Debug mode disabled.")
+    elseif command == "debug" then
+        -- Toggle debug mode
+        HardcoreDeathraceDB.debugEnabled = not HardcoreDeathraceDB.debugEnabled
+        if HardcoreDeathraceDB.debugEnabled then
+            ChatFrame1:AddMessage("|cFF00FF00[Hardcore Deathrace]|r Debug mode enabled.")
+        else
+            ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Debug mode disabled.")
+        end
     else
         -- Unknown command - show help
         ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Available commands:")
         ChatFrame1:AddMessage("  |cFFFFFF00/dr fail|r - Show failure screen (if race has failed)")
+        ChatFrame1:AddMessage("  |cFFFFFF00/dr debug|r - Toggle debug mode")
+        ChatFrame1:AddMessage("  |cFFFFFF00/dr debug on|r - Enable debug mode")
+        ChatFrame1:AddMessage("  |cFFFFFF00/dr debug off|r - Disable debug mode")
     end
 end
 
