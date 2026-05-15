@@ -2,11 +2,9 @@
 ## Title: Hardcore Deathrace
 ## Notes: Race to level 60 before time runs out, with your screen getting darker the slower you progress
 ## Author: VanityProjects - twitch.tv/vanityprojects
-## Version: 1.0.14
+## Version: 1.0.12
 ## SavedVariables: HardcoreDeathraceDB
 
 Core.lua
 UI.lua
-JoinDeathRaceChannel.lua
-Leaderboard.lua
 

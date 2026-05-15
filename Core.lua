@@ -690,17 +690,6 @@ local function OnPlayerDeath()
     -- Save account-wide high score if this run is better
     SaveAccountHighScore(totalTimePlayed)
     
-    -- Broadcast failure to leaderboard
-    if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.BuildFailureRecord then
-        local failureRecord = HardcoreDeathraceLeaderboard:BuildFailureRecord()
-        if failureRecord then
-            -- Store locally
-            HardcoreDeathraceLeaderboard:StoreRecord(failureRecord)
-            -- Broadcast to other players
-            HardcoreDeathraceLeaderboard:BroadcastRecord(failureRecord)
-        end
-    end
-    
     -- Announce failure
     AnnounceFailure()
     
@@ -768,17 +757,6 @@ local function UpdateTimer()
             -- Save account-wide high score if this run is better
             SaveAccountHighScore(totalTimePlayed)
             
-            -- Broadcast failure to leaderboard
-            if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.BuildFailureRecord then
-                local failureRecord = HardcoreDeathraceLeaderboard:BuildFailureRecord()
-                if failureRecord then
-                    -- Store locally
-                    HardcoreDeathraceLeaderboard:StoreRecord(failureRecord)
-                    -- Broadcast to other players
-                    HardcoreDeathraceLeaderboard:BroadcastRecord(failureRecord)
-                end
-            end
-            
             -- Announce failure
             AnnounceFailure()
             -- Show tunnel_vision_5.png (all black) when timer runs out
@@ -840,17 +818,6 @@ local function OnLevelUp(newLevel)
         hasWon = true
         currentLevel = 60
         SaveCharacterData()
-        
-        -- Broadcast success to leaderboard
-        if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.BuildSuccessRecord then
-            local successRecord = HardcoreDeathraceLeaderboard:BuildSuccessRecord()
-            if successRecord then
-                -- Store locally
-                HardcoreDeathraceLeaderboard:StoreRecord(successRecord)
-                -- Broadcast to other players
-                HardcoreDeathraceLeaderboard:BroadcastRecord(successRecord)
-            end
-        end
         
         -- Clear tunnel vision on win
         RemoveTunnelVision()
@@ -1430,10 +1397,6 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
         InitializeUI()
         -- Update UI immediately with loaded data
         UpdateStatisticsPanel()
-        -- Initialize leaderboard system
-        if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.Initialize then
-            HardcoreDeathraceLeaderboard:Initialize()
-        end
         -- Set up HardcoreAchievements integration if available
         C_Timer.After(2, function()
             SetupAchievementIntegration()
@@ -1692,23 +1655,10 @@ local function HandleSlashCommand(msg)
     end
 end
 
--- Slash command handler for /drlb (leaderboard toggle)
-local function HandleLeaderboardCommand(msg)
-    if HardcoreDeathraceLeaderboard and HardcoreDeathraceLeaderboard.Toggle then
-        HardcoreDeathraceLeaderboard:Toggle()
-    else
-        ChatFrame1:AddMessage("|cFFFF0000[Hardcore Deathrace]|r Leaderboard system not available.")
-    end
-end
-
 -- Register slash commands
 SLASH_HARDCOREDEATHRACE1 = "/dr"
 SLASH_HARDCOREDEATHRACE2 = "/deathrace"
 SlashCmdList["HARDCOREDEATHRACE"] = HandleSlashCommand
-
--- Register leaderboard slash command
-SLASH_DEATHRACELEADERBOARD1 = "/drlb"
-SlashCmdList["DEATHRACELEADERBOARD"] = HandleLeaderboardCommand
 
 
 
