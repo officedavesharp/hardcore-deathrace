@@ -725,7 +725,7 @@ local function CreateWelcomeScreen()
 
     local p3 = AddParagraph(dangerHeading, -8,
         'As your timer runs low your screen progressively darkens with tunnel vision. ' ..
-        'At 0% time remaining the screen goes black — your race is over.',
+        'When time runs out the screen goes black and your race is over.',
         0.9, 0.9, 0.9)
 
     local p4 = AddParagraph(p3, -12,
