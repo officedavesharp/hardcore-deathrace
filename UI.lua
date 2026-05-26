@@ -384,20 +384,9 @@ function UpdateStatisticsPanel()
         statsFrame.timeRemainingValue:SetText(timeRemainingFormatted)
     end
     
-    -- Update status label
-    if hasFailed then
-        statsFrame.statusLabel:SetText('')
-    elseif hasWon then
-        statsFrame.statusLabel:SetText('')
-    elseif not HardcoreDeathrace.HasRaceStarted() then
-        -- Race has not been started yet — prompt the player
-        statsFrame.statusLabel:SetTextColor(1, 0.82, 0)  -- Gold
-        statsFrame.statusLabel:SetText('|cFFFFD700Race Not Started|r')
-    else
-        -- Flight path pause is indicated by cyan timer color; no extra text needed
-        statsFrame.statusLabel:SetTextColor(1, 1, 1)
-        statsFrame.statusLabel:SetText('')
-    end
+    -- Status label is intentionally blank in all states
+    -- (flight path pause is conveyed by the cyan timer colour; no extra text needed)
+    statsFrame.statusLabel:SetText('')
 end
 
 -- Create failure/win screen (reusable for both)
@@ -667,13 +656,20 @@ local function CreateWelcomeScreen()
     subtitle:SetPoint('TOP', title, 'BOTTOM', 0, -6)
     subtitle:SetFont('Fonts\\FRIZQT__.TTF', 13 * fontScale, 'OUTLINE')
     subtitle:SetTextColor(1, 0.82, 0)   -- Gold
-    subtitle:SetText('Race Against Time. Die Once. Die Forever.')
+    subtitle:SetText('Race Against Time. Ding Before Darkness Falls.')
 
-    -- ---- Divider line below subtitle ----
+    -- ---- Made by credit line ----
+    local credit = welcomeFrame:CreateFontString(nil, 'OVERLAY')
+    credit:SetFont('Fonts\\FRIZQT__.TTF', 11 * fontScale)
+    credit:SetTextColor(0.65, 0.65, 0.65)  -- Muted gray
+    credit:SetPoint('TOP', subtitle, 'BOTTOM', 0, -4)
+    credit:SetText('Made by VanityProjects  |cFF9B59B6twitch.tv/vanityprojects|r')
+
+    -- ---- Divider line below credit ----
     local divider = welcomeFrame:CreateTexture(nil, 'ARTWORK')
     divider:SetColorTexture(0.5, 0.1, 0.1, 0.9)  -- Dark red stripe
     divider:SetSize(460, 2)
-    divider:SetPoint('TOP', subtitle, 'BOTTOM', 0, -10)
+    divider:SetPoint('TOP', credit, 'BOTTOM', 0, -10)
 
     -- ---- Body text ----
     -- Helper that creates a left-aligned paragraph and returns the font string
@@ -700,7 +696,7 @@ local function CreateWelcomeScreen()
     -- Section: how the race works
     local introAnchor = divider
     local p1 = AddParagraph(introAnchor, -14,
-        'Each level has a time limit. Race the clock to reach level 60 before your ' ..
+        'Each level has a time limit. Race the clock to level up before your ' ..
         'timer hits zero. The timer ticks down whether you are killing monsters, ' ..
         'questing, or standing idle — every second counts.',
         0.95, 0.95, 0.95)
@@ -715,6 +711,7 @@ local function CreateWelcomeScreen()
     local p2 = AddParagraph(bonusHeading, -8,
         '|cFF00FF00\124  Complete Hardcore Achievements|r   |cFFFFFFFF+30 min each|r\n' ..
         '|cFF00FF00\124  Level up a profession skill|r        |cFFFFFFFF+20 sec each|r\n' ..
+        '|cFF00FF00\124  Rares, chests and exploration|r       |cFFFFFFFFComing Soon|r\n' ..
         '|cFF00CC44\124  Unused time rolls over on level-up|r\n' ..
         '|cFF00CC44\124  Timer pauses in rested areas and on flight paths|r',
         1, 1, 1, 12)
@@ -731,14 +728,7 @@ local function CreateWelcomeScreen()
         'At 0% time remaining the screen goes black — your race is over.',
         0.9, 0.9, 0.9)
 
-    -- Section heading: anti-cheese warning
-    local cheeseHeading = welcomeFrame:CreateFontString(nil, 'OVERLAY')
-    cheeseHeading:SetFont('Fonts\\FRIZQT__.TTF', 13 * fontScale, 'OUTLINE')
-    cheeseHeading:SetTextColor(1, 0.6, 0)  -- Orange
-    cheeseHeading:SetPoint('TOPLEFT', p3, 'BOTTOMLEFT', 0, -12)
-    cheeseHeading:SetText('Fair Start Rule')
-
-    local p4 = AddParagraph(cheeseHeading, -8,
+    local p4 = AddParagraph(p3, -12,
         '|cFFFF4444WARNING:|r  Your timer is paused until you click Start Race. ' ..
         'If you earn any XP before starting — through kills, quests, or any other ' ..
         'means — your run |cFFFF0000fails immediately|r. No exceptions.',
@@ -754,12 +744,12 @@ local function CreateWelcomeScreen()
     local startBtn = CreateFrame('Button', nil, welcomeFrame, 'UIPanelButtonTemplate')
     startBtn:SetSize(200, 38)
     startBtn:SetPoint('BOTTOM', welcomeFrame, 'BOTTOM', 0, 22)
-    startBtn:SetText('Start Race!')
+    startBtn:SetText('Start Race')
     -- Override the default font with something bolder
     startBtn:GetFontString():SetFont('Fonts\\FRIZQT__.TTF', 15 * fontScale, 'OUTLINE')
 
-    -- Green tint on the button text to match the "race starting" feel
-    startBtn:GetFontString():SetTextColor(0.2, 1, 0.2)
+    -- White button text
+    startBtn:GetFontString():SetTextColor(1, 1, 1)
 
     startBtn:SetScript('OnClick', function()
         -- Delegate to Core.lua via the public namespace
@@ -770,13 +760,13 @@ local function CreateWelcomeScreen()
 
     -- Hover highlight: brighten text on mouseover
     startBtn:SetScript('OnEnter', function(self)
-        self:GetFontString():SetTextColor(1, 1, 1)
+        self:GetFontString():SetTextColor(1, 1, 0)  -- Yellow on hover
         GameTooltip:SetOwner(self, 'ANCHOR_TOP')
         GameTooltip:SetText('Click to begin your Deathrace!\nThe timer will start immediately.', 1, 1, 1, true)
         GameTooltip:Show()
     end)
     startBtn:SetScript('OnLeave', function(self)
-        self:GetFontString():SetTextColor(0.2, 1, 0.2)
+        self:GetFontString():SetTextColor(1, 1, 1)  -- Back to white
         GameTooltip:Hide()
     end)
 
