@@ -1,8 +1,9 @@
--- Hardcore Deathrace - UI Elements (Statistics Panel and Failure Screen)
+-- Hardcore Deathrace - UI Elements (Statistics Panel, Failure Screen, Welcome Screen)
 
 -- Statistics Panel Frame
 local statsFrame = nil
 local failureFrame = nil
+local welcomeFrame = nil  -- Welcome / Start Race modal shown before the race begins
 
 -- Initialize global settings if needed
 HardcoreDeathraceDB = HardcoreDeathraceDB or {}
@@ -383,10 +384,18 @@ function UpdateStatisticsPanel()
         statsFrame.timeRemainingValue:SetText(timeRemainingFormatted)
     end
     
-    -- Update status (flight path pause is indicated by cyan timer color, no text needed)
+    -- Update status label
     if hasFailed then
         statsFrame.statusLabel:SetText('')
+    elseif hasWon then
+        statsFrame.statusLabel:SetText('')
+    elseif not HardcoreDeathrace.HasRaceStarted() then
+        -- Race has not been started yet — prompt the player
+        statsFrame.statusLabel:SetTextColor(1, 0.82, 0)  -- Gold
+        statsFrame.statusLabel:SetText('|cFFFFD700Race Not Started|r')
     else
+        -- Flight path pause is indicated by cyan timer color; no extra text needed
+        statsFrame.statusLabel:SetTextColor(1, 1, 1)
         statsFrame.statusLabel:SetText('')
     end
 end
@@ -600,6 +609,207 @@ function ShowWinScreen()
     
     -- Keep statistics panel visible but stopped (times won't update)
 end
+
+--/*******************/ WELCOME / START RACE SCREEN /*************************/--
+
+-- Creates (or recreates) the welcome modal and stores it in welcomeFrame.
+-- The frame is hidden by default; call ShowWelcomeScreen() to display it.
+local function CreateWelcomeScreen()
+    -- Tear down any previous instance so the frame is always fresh on first show
+    if welcomeFrame then
+        welcomeFrame:Hide()
+        welcomeFrame = nil
+    end
+
+    local fontScale = GetFontScale()
+
+    -- ---- Outer frame ----
+    -- Use BackdropTemplate for the classic Blizzard dialog look
+    welcomeFrame = CreateFrame('Frame', 'HardcoreDeathraceWelcomeFrame', UIParent, 'BackdropTemplate')
+    welcomeFrame:SetSize(520, 530)
+    welcomeFrame:SetPoint('CENTER', UIParent, 'CENTER', 0, 20)
+
+    -- Classic dialog chrome: dark background + ornate border
+    welcomeFrame:SetBackdrop({
+        bgFile   = 'Interface\\DialogFrame\\UI-DialogBox-Background',
+        edgeFile = 'Interface\\DialogFrame\\UI-DialogBox-Border',
+        tile     = true,
+        tileSize = 32,
+        edgeSize = 32,
+        insets   = { left = 11, right = 12, top = 12, bottom = 11 },
+    })
+    welcomeFrame:SetBackdropColor(0, 0, 0, 1)
+
+    -- Render above game UI but below system dialogs
+    welcomeFrame:SetFrameStrata('DIALOG')
+    welcomeFrame:SetFrameLevel(50)
+
+    -- Allow Escape key to dismiss (players can close it, but XP check still applies)
+    tinsert(UISpecialFrames, 'HardcoreDeathraceWelcomeFrame')
+
+    -- Allow dragging so it can be moved out of the way
+    welcomeFrame:SetMovable(true)
+    welcomeFrame:EnableMouse(true)
+    welcomeFrame:RegisterForDrag('LeftButton')
+    welcomeFrame:SetScript('OnDragStart', welcomeFrame.StartMoving)
+    welcomeFrame:SetScript('OnDragStop',  welcomeFrame.StopMovingOrSizing)
+
+    -- ---- Title ----
+    local title = welcomeFrame:CreateFontString(nil, 'OVERLAY')
+    title:SetFont('Fonts\\MORPHEUS.TTF', 30 * fontScale, 'OUTLINE')
+    title:SetPoint('TOP', welcomeFrame, 'TOP', 0, -22)
+    title:SetText('|cFFFF0000Hardcore Deathrace|r')
+    title:SetShadowOffset(2, -2)
+    title:SetShadowColor(0, 0, 0, 1)
+
+    -- ---- Subtitle ----
+    local subtitle = welcomeFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormalLarge')
+    subtitle:SetPoint('TOP', title, 'BOTTOM', 0, -6)
+    subtitle:SetFont('Fonts\\FRIZQT__.TTF', 13 * fontScale, 'OUTLINE')
+    subtitle:SetTextColor(1, 0.82, 0)   -- Gold
+    subtitle:SetText('Race Against Time. Die Once. Die Forever.')
+
+    -- ---- Divider line below subtitle ----
+    local divider = welcomeFrame:CreateTexture(nil, 'ARTWORK')
+    divider:SetColorTexture(0.5, 0.1, 0.1, 0.9)  -- Dark red stripe
+    divider:SetSize(460, 2)
+    divider:SetPoint('TOP', subtitle, 'BOTTOM', 0, -10)
+
+    -- ---- Body text ----
+    -- Helper that creates a left-aligned paragraph and returns the font string
+    local BODY_LEFT   = -230  -- left edge x relative to frame center
+    local BODY_WIDTH  = 460
+
+    local function AddParagraph(anchorTo, yOffset, text, r, g, b, size)
+        local fs = welcomeFrame:CreateFontString(nil, 'OVERLAY', 'GameFontHighlight')
+        fs:SetFont('Fonts\\FRIZQT__.TTF', (size or 12) * fontScale)
+        fs:SetTextColor(r or 0.9, g or 0.9, b or 0.9)
+        fs:SetWidth(BODY_WIDTH)
+        fs:SetJustifyH('LEFT')
+        fs:SetNonSpaceWrap(true)
+        if type(anchorTo) == 'table' then
+            fs:SetPoint('TOPLEFT', anchorTo, 'BOTTOMLEFT', 0, yOffset)
+        else
+            -- anchorTo is a y-offset from the frame TOP
+            fs:SetPoint('TOPLEFT', welcomeFrame, 'TOPLEFT', 30, anchorTo)
+        end
+        fs:SetText(text)
+        return fs
+    end
+
+    -- Section: how the race works
+    local introAnchor = divider
+    local p1 = AddParagraph(introAnchor, -14,
+        'Each level has a time limit. Race the clock to reach level 60 before your ' ..
+        'timer hits zero. The timer ticks down whether you are killing monsters, ' ..
+        'questing, or standing idle — every second counts.',
+        0.95, 0.95, 0.95)
+
+    -- Section heading: earning bonus time
+    local bonusHeading = welcomeFrame:CreateFontString(nil, 'OVERLAY')
+    bonusHeading:SetFont('Fonts\\FRIZQT__.TTF', 13 * fontScale, 'OUTLINE')
+    bonusHeading:SetTextColor(1, 0.82, 0)  -- Gold
+    bonusHeading:SetPoint('TOPLEFT', p1, 'BOTTOMLEFT', 0, -12)
+    bonusHeading:SetText('Earning Bonus Time')
+
+    local p2 = AddParagraph(bonusHeading, -8,
+        '|cFF00FF00\124  Complete Hardcore Achievements|r   |cFFFFFFFF+30 min each|r\n' ..
+        '|cFF00FF00\124  Level up a profession skill|r        |cFFFFFFFF+20 sec each|r\n' ..
+        '|cFF00CC44\124  Unused time rolls over on level-up|r\n' ..
+        '|cFF00CC44\124  Timer pauses in rested areas and on flight paths|r',
+        1, 1, 1, 12)
+
+    -- Section heading: danger
+    local dangerHeading = welcomeFrame:CreateFontString(nil, 'OVERLAY')
+    dangerHeading:SetFont('Fonts\\FRIZQT__.TTF', 13 * fontScale, 'OUTLINE')
+    dangerHeading:SetTextColor(1, 0.3, 0.3)  -- Red
+    dangerHeading:SetPoint('TOPLEFT', p2, 'BOTTOMLEFT', 0, -12)
+    dangerHeading:SetText('Darkness Falls')
+
+    local p3 = AddParagraph(dangerHeading, -8,
+        'As your timer runs low your screen progressively darkens with tunnel vision. ' ..
+        'At 0% time remaining the screen goes black — your race is over.',
+        0.9, 0.9, 0.9)
+
+    -- Section heading: anti-cheese warning
+    local cheeseHeading = welcomeFrame:CreateFontString(nil, 'OVERLAY')
+    cheeseHeading:SetFont('Fonts\\FRIZQT__.TTF', 13 * fontScale, 'OUTLINE')
+    cheeseHeading:SetTextColor(1, 0.6, 0)  -- Orange
+    cheeseHeading:SetPoint('TOPLEFT', p3, 'BOTTOMLEFT', 0, -12)
+    cheeseHeading:SetText('Fair Start Rule')
+
+    local p4 = AddParagraph(cheeseHeading, -8,
+        '|cFFFF4444WARNING:|r  Your timer is paused until you click Start Race. ' ..
+        'If you earn any XP before starting — through kills, quests, or any other ' ..
+        'means — your run |cFFFF0000fails immediately|r. No exceptions.',
+        0.95, 0.85, 0.85)
+
+    -- ---- Second divider above button ----
+    local divider2 = welcomeFrame:CreateTexture(nil, 'ARTWORK')
+    divider2:SetColorTexture(0.5, 0.1, 0.1, 0.9)
+    divider2:SetSize(460, 2)
+    divider2:SetPoint('TOP', p4, 'BOTTOM', 0, -18)
+
+    -- ---- "Start Race" button ----
+    local startBtn = CreateFrame('Button', nil, welcomeFrame, 'UIPanelButtonTemplate')
+    startBtn:SetSize(200, 38)
+    startBtn:SetPoint('BOTTOM', welcomeFrame, 'BOTTOM', 0, 22)
+    startBtn:SetText('Start Race!')
+    -- Override the default font with something bolder
+    startBtn:GetFontString():SetFont('Fonts\\FRIZQT__.TTF', 15 * fontScale, 'OUTLINE')
+
+    -- Green tint on the button text to match the "race starting" feel
+    startBtn:GetFontString():SetTextColor(0.2, 1, 0.2)
+
+    startBtn:SetScript('OnClick', function()
+        -- Delegate to Core.lua via the public namespace
+        if HardcoreDeathrace and HardcoreDeathrace.StartRace then
+            HardcoreDeathrace.StartRace()
+        end
+    end)
+
+    -- Hover highlight: brighten text on mouseover
+    startBtn:SetScript('OnEnter', function(self)
+        self:GetFontString():SetTextColor(1, 1, 1)
+        GameTooltip:SetOwner(self, 'ANCHOR_TOP')
+        GameTooltip:SetText('Click to begin your Deathrace!\nThe timer will start immediately.', 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    startBtn:SetScript('OnLeave', function(self)
+        self:GetFontString():SetTextColor(0.2, 1, 0.2)
+        GameTooltip:Hide()
+    end)
+
+    -- Resize the frame to snugly fit all content (bottom of divider2 + button area + padding)
+    -- We compute height dynamically from the bottom of p4 to keep it tidy
+    local frameBottom = welcomeFrame:GetBottom()
+    welcomeFrame:SetHeight(530)  -- Fixed height that comfortably fits all content
+
+    welcomeFrame:Hide()  -- Hidden until ShowWelcomeScreen() is called
+end
+
+-- Shows the welcome screen, creating it first if needed.
+-- Called from Core.lua's PLAYER_LOGIN handler when raceStarted == false.
+function ShowWelcomeScreen()
+    if not welcomeFrame then
+        CreateWelcomeScreen()
+    end
+    welcomeFrame:Show()
+    -- Raise above any other frames that may have appeared since creation
+    welcomeFrame:Raise()
+end
+
+-- Hides the welcome screen. Called by StartRace() in Core.lua (via _G.HideWelcomeScreen)
+-- and also by the XP-cheat fail path.
+function HideWelcomeScreen()
+    if welcomeFrame then
+        welcomeFrame:Hide()
+    end
+end
+
+-- Export both functions as globals so Core.lua can call them by name
+_G.ShowWelcomeScreen = ShowWelcomeScreen
+_G.HideWelcomeScreen = HideWelcomeScreen
 
 -- Show floating bonus time indicator
 -- Displays a green text that floats upward from the stats frame

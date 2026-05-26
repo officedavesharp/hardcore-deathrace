@@ -98,6 +98,8 @@ local hasWon = false              -- Whether the deathrace has been won (reached
 local failureLevel = 1            -- Level at which the player failed
 local previousDarknessLevel = 0   -- Track previous darkness level for proper overlay management
 local professionBonusLevels = {}  -- Track profession skill levels that have already granted bonus time (prevents re-gaining bonus after unlearning/relearning)
+local raceStarted = false          -- Whether the player has clicked "Start Race" — timer only ticks after this is true
+local lastKnownXP = 0              -- XP snapshot used to detect XP gain before the race is officially started
 
 -- Tunnel vision frames storage is initialized at the top of the file (properly namespaced to avoid conflicts)
 -- All frames created by this addon are stored in HardcoreDeathrace.tunnelVisionFrames with names prefixed "HardcoreDeathraceTunnelVision_"
@@ -201,6 +203,27 @@ local function InitializeCharacterData()
     failureLevel = charData.failureLevel or currentLevel
     professionBonusLevels = charData.professionBonusLevels or {}  -- Load tracked profession bonus levels
     timeAtLastUpdate = time()
+
+    -- Determine whether the race has been started.
+    -- Backward-compat rule: existing saves that pre-date this field (nil) are treated as
+    -- already-started so that players mid-run are not forced through the welcome screen again.
+    -- New level-1 characters start with raceStarted = false (welcome screen will show).
+    -- Completed (failed/won) runs are also marked started so the screen never re-appears.
+    if charData.raceStarted ~= nil then
+        raceStarted = charData.raceStarted
+    elseif hasFailed or hasWon then
+        -- Completed run from before this field existed — treat as started
+        raceStarted = true
+    elseif charData.totalTimePlayed and charData.totalTimePlayed > 0 then
+        -- Run with recorded play-time from before this field existed — treat as started
+        raceStarted = true
+    else
+        -- Freshly initialised character — show the welcome screen
+        raceStarted = false
+    end
+
+    -- Snapshot current XP so PLAYER_XP_UPDATE can detect any gain before Start Race
+    lastKnownXP = currentXP
     
     -- Check if this is a first-time load failure (level > 1 on first load)
     -- Detected by: failed, no time played, level > 1, and level matches current (just initialized)
@@ -278,7 +301,8 @@ SaveCharacterData = function()
         hasFailed = hasFailed,
         hasWon = hasWon,
         failureLevel = failureLevel,
-        professionBonusLevels = professionBonusLevels  -- Save tracked profession bonus levels
+        professionBonusLevels = professionBonusLevels,  -- Save tracked profession bonus levels
+        raceStarted = raceStarted  -- Whether the player has clicked Start Race
     }
 end
 
@@ -706,7 +730,8 @@ end
 
 -- Update timer and check for failure
 local function UpdateTimer()
-    if hasFailed or hasWon or isPaused then
+    -- Timer must not tick until the player has officially clicked Start Race
+    if hasFailed or hasWon or isPaused or not raceStarted then
         return
     end
     
@@ -792,6 +817,23 @@ local AnnounceLevelUp
 -- Handle level up
 local function OnLevelUp(newLevel)
     if hasFailed or hasWon then
+        return
+    end
+
+    -- Gaining a level before the race starts is an instant fail (XP cheesing)
+    if not raceStarted then
+        hasFailed = true
+        failureLevel = currentLevel
+        timeRemainingThisLevel = 0
+        totalTimePlayed = 0
+        SaveCharacterData()
+        local previousHighScore = GetAccountHighScore()
+        SaveAccountHighScore(totalTimePlayed)
+        if _G.HideWelcomeScreen then _G.HideWelcomeScreen() end
+        RemoveTunnelVision()
+        ShowTunnelVision(5, false)
+        ShowFailureScreen(previousHighScore)
+        UpdateStatisticsPanel()
         return
     end
     
@@ -1166,6 +1208,29 @@ local function SetupAchievementIntegration()
     return true
 end
 
+--/*******************/ RACE START /*************************/--
+-- Called by the welcome screen's "Start Race" button.
+-- Officially begins the countdown — until this is called, UpdateTimer is a no-op.
+local function StartRace()
+    if raceStarted then return end  -- Guard against accidental double-calls
+
+    raceStarted = true
+
+    -- Reset the last-update timestamp so that any time elapsed while the welcome
+    -- screen was open is NOT counted against the player's timer.
+    timeAtLastUpdate = time()
+
+    SaveCharacterData()
+
+    -- Close the welcome screen (defined in UI.lua, called via global)
+    if _G.HideWelcomeScreen then
+        _G.HideWelcomeScreen()
+    end
+
+    -- Refresh the stats panel to clear the "Race Not Started" status label
+    UpdateStatisticsPanel()
+end
+
 --/*******************/ PARTY JOIN ANNOUNCEMENT SYSTEM /*************************/--
 -- System to announce Hardcore Deathrace addon usage when joining or when others join party
 
@@ -1334,6 +1399,7 @@ HardcoreDeathrace:RegisterEvent('PLAYER_CONTROL_GAINED') -- Detect when flight p
 HardcoreDeathrace:RegisterEvent('GROUP_JOINED') -- Detect when player joins a party/raid
 HardcoreDeathrace:RegisterEvent('GROUP_ROSTER_UPDATE') -- Detect when party/raid roster changes
 HardcoreDeathrace:RegisterEvent('PLAYER_DEAD') -- Detect when player dies
+HardcoreDeathrace:RegisterEvent('PLAYER_XP_UPDATE') -- Detect XP gain (used to catch cheesing before Start Race)
 
 -- Event handler
 HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
@@ -1372,6 +1438,14 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
         end)
         -- Start update timer (update every second)
         C_Timer.NewTicker(1, UpdateTimer)
+        -- Show the welcome / start-race screen for characters that have not yet begun their run
+        if not raceStarted and not hasFailed and not hasWon then
+            C_Timer.After(0.5, function()
+                if _G.ShowWelcomeScreen then
+                    _G.ShowWelcomeScreen()
+                end
+            end)
+        end
     elseif event == 'PLAYER_LEVEL_UP' then
         local newLevel = ...
         OnLevelUp(newLevel)
@@ -1516,6 +1590,30 @@ HardcoreDeathrace:SetScript('OnEvent', function(self, event, ...)
     elseif event == 'PLAYER_DEAD' then
         -- Player died - pause timer and fail the run
         OnPlayerDeath()
+    elseif event == 'PLAYER_XP_UPDATE' then
+        -- Detect XP gain while the race has not been officially started.
+        -- Any XP earned before clicking Start Race is considered cheesing and fails the run.
+        if not raceStarted and not hasFailed and not hasWon then
+            local currentXP = UnitXP('player')
+            if currentXP > lastKnownXP then
+                -- XP was gained before the race started — instant fail
+                hasFailed = true
+                failureLevel = currentLevel
+                timeRemainingThisLevel = 0
+                totalTimePlayed = 0
+                SaveCharacterData()
+                local previousHighScore = GetAccountHighScore()
+                SaveAccountHighScore(totalTimePlayed)
+                -- Dismiss the welcome screen if it is still open
+                if _G.HideWelcomeScreen then _G.HideWelcomeScreen() end
+                RemoveTunnelVision()
+                ShowTunnelVision(5, false)
+                ShowFailureScreen(previousHighScore)
+                UpdateStatisticsPanel()
+            end
+            -- Keep snapshot current so a second event doesn't double-fire
+            lastKnownXP = currentXP
+        end
     end
 end)
 
@@ -1564,6 +1662,8 @@ HardcoreDeathrace.GetOriginalTimeAllocation = function() return originalTimeAllo
 HardcoreDeathrace.GetDarknessLevel = GetDarknessLevel
 HardcoreDeathrace.GetTimeUntilNextDarkness = GetTimeUntilNextDarkness
 HardcoreDeathrace.GetAccountHighScore = GetAccountHighScore
+HardcoreDeathrace.StartRace = StartRace
+HardcoreDeathrace.HasRaceStarted = function() return raceStarted end
 -- Export tunnel vision functions through namespace to avoid conflicts with other addons
 HardcoreDeathrace.RemoveTunnelVision = RemoveTunnelVision
 HardcoreDeathrace.ShowTunnelVision = ShowTunnelVision
