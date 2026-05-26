@@ -205,20 +205,30 @@ local function InitializeCharacterData()
     timeAtLastUpdate = time()
 
     -- Determine whether the race has been started.
-    -- Backward-compat rule: existing saves that pre-date this field (nil) are treated as
-    -- already-started so that players mid-run are not forced through the welcome screen again.
-    -- New level-1 characters start with raceStarted = false (welcome screen will show).
-    -- Completed (failed/won) runs are also marked started so the screen never re-appears.
+    -- For saves that already contain this field (written by the current version) just use
+    -- the stored value directly.
+    -- For legacy saves (field absent, e.g. players updating mid-run) we fall back to a
+    -- conservative check: the welcome screen is ONLY shown for a truly fresh character
+    -- — level 1 with 0 XP.  Anyone above level 1, or with any XP at level 1, or with any
+    -- recorded play-time, is treated as already started so they are never interrupted.
     if charData.raceStarted ~= nil then
+        -- Current-version save — use the persisted value as-is
         raceStarted = charData.raceStarted
     elseif hasFailed or hasWon then
-        -- Completed run from before this field existed — treat as started
+        -- Completed run (pre-dates this field) — definitely already started
         raceStarted = true
     elseif charData.totalTimePlayed and charData.totalTimePlayed > 0 then
-        -- Run with recorded play-time from before this field existed — treat as started
+        -- Active run with recorded play-time (pre-dates this field) — already started
+        raceStarted = true
+    elseif playerLevel > 1 then
+        -- Above level 1 — they must have been playing already
+        raceStarted = true
+    elseif currentXP > 0 then
+        -- Level 1 but has XP — already in progress
         raceStarted = true
     else
-        -- Freshly initialised character — show the welcome screen
+        -- Genuinely fresh character: level 1, 0 XP, no play-time, no prior result.
+        -- Show the welcome screen so they can read the rules and click Start Race.
         raceStarted = false
     end
 
