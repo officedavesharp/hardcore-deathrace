@@ -1095,105 +1095,74 @@ local function ShouldIgnoreAchievement(achievementName)
     return false
 end
 
--- Extract achievement name from row parameter
--- Based on HardcoreAchievements addon structure: row.Title is a font string frame
-local function GetAchievementNameFromRow(row)
-    if not row then
-        return nil
-    end
-    
-    -- Primary method: row.Title:GetText() (confirmed from HardcoreAchievements.lua line 833)
-    -- This is how HardcoreAchievements extracts the achievement title
-    if row.Title and type(row.Title.GetText) == "function" then
-        local title = row.Title:GetText()
-        if title and type(title) == "string" and title ~= "" then
-            return title
-        end
-    end
-    
-    -- Fallback patterns (in case row structure differs)
-    -- Pattern 1: row.text (if row contains a font string)
-    if row.text and type(row.text) == "string" then
-        return row.text
-    end
-    
-    -- Pattern 2: row.name
-    if row.name and type(row.name) == "string" then
-        return row.name
-    end
-    
-    -- Pattern 3: row.achievementName
-    if row.achievementName and type(row.achievementName) == "string" then
-        return row.achievementName
-    end
-    
-    -- Pattern 4: row.GetText() method (if row itself is a font string frame)
-    if type(row.GetText) == "function" then
-        local text = row:GetText()
-        if text and type(text) == "string" then
-            return text
-        end
-    end
-    
-    return nil
-end
-
 -- Integration with HardcoreAchievements addon
--- Hook into achievement completion to add time bonus
+-- Uses the official HardcoreAchievements.Hooks:HookScript("OnAchievement", ...) API
+-- (the old _G.HCA_MarkRowCompleted global no longer exists in HardcoreAchievements)
+
+-- Guard flag so we only register the hook once even if SetupAchievementIntegration
+-- is called multiple times (ADDON_LOADED + PLAYER_LOGIN both attempt setup).
+local achievementIntegrationRegistered = false
+
 local function SetupAchievementIntegration()
-    -- Check if HardcoreAchievements addon is loaded
-    if not _G.HCA_MarkRowCompleted then
+    -- Bail out if we already registered, or if HCA isn't loaded yet
+    if achievementIntegrationRegistered then
+        return true
+    end
+
+    -- HardcoreAchievements exposes its public hook table as _G.HardcoreAchievements.Hooks
+    if not (_G.HardcoreAchievements and _G.HardcoreAchievements.Hooks) then
         return false
     end
-    
-    -- Save the original function
-    local originalMarkRowCompleted = _G.HCA_MarkRowCompleted
-    
-    -- Wrap the function to detect achievement completion
-    _G.HCA_MarkRowCompleted = function(row, ...)
-        -- Call the original function first
-        local result = originalMarkRowCompleted(row, ...)
-        
-        -- Only add time if not failed/won and HardcoreAchievements is available
-        if not hasFailed and not hasWon and HardcoreAchievements then
-            -- Try to extract achievement name from row parameter and additional parameters
-            local achievementName = GetAchievementNameFromRow(row)
-            
-            -- If we couldn't get name from row, try checking additional parameters
-            if not achievementName then
-                local args = {...}
-                -- Check if first additional parameter is the achievement name
-                if args[1] and type(args[1]) == "string" then
-                    achievementName = args[1]
-                end
-            end
-            
-            -- Check if this achievement should be ignored
-            if not ShouldIgnoreAchievement(achievementName) then
-                -- Add 30 minutes (1800 seconds) to failure timer when achievement is completed
-                timeRemainingThisLevel = timeRemainingThisLevel + 1800
-                -- Update max time remaining to include bonus time
-                if timeRemainingThisLevel > maxTimeRemainingThisLevel then
-                    maxTimeRemainingThisLevel = timeRemainingThisLevel
-                end
-                
-                -- Show floating bonus time indicator
-                if _G.ShowBonusTimeFloat then
-                    _G.ShowBonusTimeFloat("+30 min")
-                end
-                
-                -- Update UI to reflect the bonus time
-                UpdateStatisticsPanel()
-                
-                -- Save the updated time
-                SaveCharacterData()
-            end
-            -- If achievement should be ignored, do nothing (no bonus time granted)
+
+    -- Get the local player's GUID once so we can filter callbacks for our own character.
+    -- HCA fires OnAchievement for every player whose achievement is processed locally
+    -- (e.g. guild-first syncs), so we must only react to our own completions.
+    local localPlayerGUID = UnitGUID and UnitGUID("player") or nil
+
+    -- Register the OnAchievement callback.
+    -- achievementData fields provided by HCA:
+    --   title          (string)  – human-readable achievement name
+    --   achievementId  (string)  – internal HCA identifier
+    --   points         (number)
+    --   completedAt    (number)  – time() timestamp
+    --   level          (number)  – character level at completion
+    --   wasSolo        (boolean)
+    --   playerGUID     (string)  – GUID of the character that earned it
+    --   completedCount, totalCount, totalPoints (numbers)
+    _G.HardcoreAchievements.Hooks:HookScript("OnAchievement", function(achievementData)
+        -- Only act on our own character's achievements
+        if localPlayerGUID and achievementData.playerGUID ~= localPlayerGUID then
+            return
         end
-        
-        return result
-    end
-    
+
+        -- Skip if the race is already over
+        if hasFailed or hasWon then
+            return
+        end
+
+        -- achievementData.title is the clean achievement name string; use it directly
+        -- for the ignore check (profession achievements, etc. should not grant bonus time)
+        if not ShouldIgnoreAchievement(achievementData.title) then
+            -- Award +30 minutes (1800 seconds) for completing a qualifying achievement
+            timeRemainingThisLevel = timeRemainingThisLevel + 1800
+
+            -- Keep maxTimeRemainingThisLevel in sync so the darkness thresholds display correctly
+            if timeRemainingThisLevel > maxTimeRemainingThisLevel then
+                maxTimeRemainingThisLevel = timeRemainingThisLevel
+            end
+
+            -- Show the floating "+30 min" indicator on screen
+            if _G.ShowBonusTimeFloat then
+                _G.ShowBonusTimeFloat("+30 min")
+            end
+
+            -- Refresh the statistics panel and persist the new time value
+            UpdateStatisticsPanel()
+            SaveCharacterData()
+        end
+    end)
+
+    achievementIntegrationRegistered = true
     return true
 end
 
